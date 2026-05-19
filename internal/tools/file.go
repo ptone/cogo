@@ -6,6 +6,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"go/format"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -38,8 +39,9 @@ type writeFileArgs struct {
 }
 
 type writeFileResult struct {
-	Status string `json:"status"`
-	Bytes  int    `json:"bytes"`
+	Status    string `json:"status"`
+	Bytes     int    `json:"bytes"`
+	Formatted bool   `json:"formatted,omitempty"` // true when gofmt was applied to a .go file
 }
 
 type editFileArgs struct {
@@ -51,6 +53,7 @@ type editFileArgs struct {
 type editFileResult struct {
 	Status       string `json:"status"`
 	Replacements int    `json:"replacements"`
+	Formatted    bool   `json:"formatted,omitempty"` // true when gofmt was applied to a .go file
 }
 
 type listDirArgs struct {
@@ -103,10 +106,11 @@ func writeFileFunc(gate *permissions.Gate) functiontool.Func[writeFileArgs, writ
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return writeFileResult{}, fmt.Errorf("write_file: mkdir: %w", err)
 		}
-		if err := atomicWrite(path, []byte(in.Content), 0o644); err != nil {
+		data, applied := maybeFormatGo(path, []byte(in.Content))
+		if err := atomicWrite(path, data, 0o644); err != nil {
 			return writeFileResult{}, fmt.Errorf("write_file: %w", err)
 		}
-		return writeFileResult{Status: "wrote " + path, Bytes: len(in.Content)}, nil
+		return writeFileResult{Status: "wrote " + path, Bytes: len(data), Formatted: applied}, nil
 	}
 }
 
@@ -138,10 +142,11 @@ func editFileFunc(gate *permissions.Gate) functiontool.Func[editFileArgs, editFi
 			return editFileResult{}, fmt.Errorf("edit_file: old_string appears %d times in %s; provide a unique snippet", count, path)
 		}
 		updated := strings.Replace(body, in.OldString, in.NewString, 1)
-		if err := atomicWrite(path, []byte(updated), 0o644); err != nil {
+		data, applied := maybeFormatGo(path, []byte(updated))
+		if err := atomicWrite(path, data, 0o644); err != nil {
 			return editFileResult{}, fmt.Errorf("edit_file: %w", err)
 		}
-		return editFileResult{Status: "edited " + path, Replacements: 1}, nil
+		return editFileResult{Status: "edited " + path, Replacements: 1, Formatted: applied}, nil
 	}
 }
 
@@ -212,6 +217,30 @@ func sliceLines(text string, offset, limit int) string {
 		end = offset + limit
 	}
 	return strings.Join(lines[offset:end], "")
+}
+
+// maybeFormatGo applies gofmt to data when path looks like a Go source
+// file. Returns (formatted, true) on a successful reformat. Returns
+// (data, false) in three cases:
+//   - path doesn't have a .go extension (nothing to do)
+//   - the content is not parseable Go (preserve user content; the
+//     syntax error will surface on the next go build / vet rather
+//     than being masked by a failed write)
+//   - the formatter returned an unexpected error (same reason)
+//
+// Hooked into write_file and edit_file so every Go file the agent
+// touches lands gofmt-clean without the agent having to remember.
+// Silent on non-Go files and on already-formatted Go files (gofmt
+// is idempotent — clean input produces identical output).
+func maybeFormatGo(path string, data []byte) ([]byte, bool) {
+	if filepath.Ext(path) != ".go" {
+		return data, false
+	}
+	formatted, err := format.Source(data)
+	if err != nil {
+		return data, false
+	}
+	return formatted, true
 }
 
 // atomicWrite writes data to path via temp + rename so a crash mid-write

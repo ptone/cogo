@@ -93,6 +93,121 @@ func TestWriteFile_AtomicAndContent(t *testing.T) {
 	}
 }
 
+// TestWriteFile_AutoGofmtOnGoFiles pins the v0.3.2 silent-quality
+// hook: when write_file receives a .go file, gofmt is applied
+// before the file lands on disk. The agent doesn't have to remember
+// to format. If you remove this behavior, every Go file the agent
+// writes ships unformatted and we re-introduce a class of trivial
+// nit churn. DO NOT delete this test to silence a compile failure;
+// fix the writer instead.
+func TestWriteFile_AutoGofmtOnGoFiles(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	// Deliberately ugly: extra tabs/spaces, mixed indentation.
+	// gofmt should collapse to the canonical form.
+	ugly := "package main\n\nfunc   main( ){\nfmt.Println(\"hi\")\n}\n"
+	gate := gateFor(t, dir)
+	fn := writeFileFunc(gate)
+	res, err := fn(tool.Context(nil), writeFileArgs{Path: path, Content: ugly})
+	if err != nil {
+		t.Fatalf("write_file: %v", err)
+	}
+	if !res.Formatted {
+		t.Errorf("expected Formatted=true on a .go file with valid syntax; got false")
+	}
+	body, _ := os.ReadFile(path)
+	got := string(body)
+	if got == ugly {
+		t.Errorf("on-disk content matches input verbatim; gofmt did not run\n%s", got)
+	}
+	if !strings.Contains(got, "func main() {") {
+		t.Errorf("expected canonical gofmt'd `func main() {`; got\n%s", got)
+	}
+}
+
+// TestWriteFile_AutoGofmtPreservesInvalidGo confirms that when the
+// content can't be parsed (syntax error), the writer falls back to
+// writing the user's content unchanged rather than rejecting the
+// write or silently dropping the file. The syntax error will surface
+// on the next go build / vet — better than masking it with a failed
+// write.
+func TestWriteFile_AutoGofmtPreservesInvalidGo(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "broken.go")
+	broken := "package main\n\nfunc main() { THIS IS NOT VALID GO\n"
+	gate := gateFor(t, dir)
+	fn := writeFileFunc(gate)
+	res, err := fn(tool.Context(nil), writeFileArgs{Path: path, Content: broken})
+	if err != nil {
+		t.Fatalf("write_file should not error on broken Go; got %v", err)
+	}
+	if res.Formatted {
+		t.Errorf("Formatted=true on un-parseable input; want false (gofmt failed cleanly)")
+	}
+	body, _ := os.ReadFile(path)
+	if string(body) != broken {
+		t.Errorf("on-disk content was mutated despite failed format; got %q", string(body))
+	}
+}
+
+// TestWriteFile_NonGoFilesNotFormatted confirms the hook is scoped
+// to .go files only — Markdown, JSON, .txt etc. pass through.
+func TestWriteFile_NonGoFilesNotFormatted(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "README.md")
+	// Heavy indentation that gofmt would canonicalize if it ran.
+	body := "#   hello\n\nfunc   world( ){\n}\n"
+	gate := gateFor(t, dir)
+	fn := writeFileFunc(gate)
+	res, err := fn(tool.Context(nil), writeFileArgs{Path: path, Content: body})
+	if err != nil {
+		t.Fatalf("write_file: %v", err)
+	}
+	if res.Formatted {
+		t.Errorf("Formatted=true on a .md file; want false")
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != body {
+		t.Errorf("non-Go file was mutated; got %q want %q", string(got), body)
+	}
+}
+
+// TestEditFile_AutoGofmtOnGoFiles confirms the edit path also runs
+// gofmt — symmetric to write_file. Important because most agent edits
+// to Go files come through edit_file (partial replacements), not
+// write_file (full rewrites).
+func TestEditFile_AutoGofmtOnGoFiles(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	original := "package main\n\nfunc main() {\n\tfmt.Println(\"old\")\n}\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gate := gateFor(t, dir)
+	fn := editFileFunc(gate)
+	// Replacement introduces deliberately bad spacing; gofmt should
+	// clean it up before the file lands.
+	res, err := fn(tool.Context(nil), editFileArgs{
+		Path:      path,
+		OldString: "fmt.Println(\"old\")",
+		NewString: "fmt.Println(  \"new\"  )",
+	})
+	if err != nil {
+		t.Fatalf("edit_file: %v", err)
+	}
+	if !res.Formatted {
+		t.Errorf("expected Formatted=true on a .go file edit; got false")
+	}
+	body, _ := os.ReadFile(path)
+	if !strings.Contains(string(body), `fmt.Println("new")`) {
+		t.Errorf("expected canonical spacing in result; got\n%s", string(body))
+	}
+}
+
 func TestEditFile_UniqueReplacement(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
