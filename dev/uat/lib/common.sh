@@ -89,11 +89,23 @@ uat_setup_clone() {
 }
 
 # uat_cleanup removes the temp dir. Idempotent; safe in a trap.
+#
+# When UAT_KEEP_WORKDIR is set, the dir is preserved and its path is
+# announced to stderr so the user can inspect failed runs (e.g. look
+# at the agent's edits when an assertion failed). Useful diagnostic
+# for assertions like "file should match /pattern/" — without this
+# knob the workdir is gone by the time the failure message lands.
 uat_cleanup() {
-  if [[ -n "${UAT_WORKDIR:-}" && -d "$UAT_WORKDIR" ]]; then
-    rm -rf "$UAT_WORKDIR"
-    unset UAT_WORKDIR
+  if [[ -z "${UAT_WORKDIR:-}" || ! -d "$UAT_WORKDIR" ]]; then
+    return 0
   fi
+  if [[ -n "${UAT_KEEP_WORKDIR:-}" ]]; then
+    echo "uat: keeping workdir for inspection: $UAT_WORKDIR" >&2
+    unset UAT_WORKDIR
+    return 0
+  fi
+  rm -rf "$UAT_WORKDIR"
+  unset UAT_WORKDIR
 }
 
 # uat_run_cogo invokes cogo with a prompt and captures stdout, stderr,

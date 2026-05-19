@@ -42,6 +42,12 @@ UAT_TIMEOUT=600 dev/uat/runner.sh uat-3.3
 # Exercise the permission gate instead of bypassing it (rare;
 # UATs aren't gate tests)
 UAT_NO_YOLO=1 dev/uat/runner.sh uat-2.1
+
+# Keep the throwaway workdir for post-mortem inspection (useful
+# when an assertion fails and you want to see what the agent
+# actually did)
+UAT_KEEP_WORKDIR=1 dev/uat/runner.sh uat-2.1
+# → "uat: keeping workdir for inspection: /tmp/cogo-uat-XXXXXX"
 ```
 
 Each UAT runs inside a throwaway clone in a temp dir; your working
