@@ -95,6 +95,24 @@ func Build(cfg *config.Config, gate *permissions.Gate) (*Registry, error) {
 				Description: "Look up Go documentation for a package, symbol, or pkg.Symbol — same target syntax as the `go doc` CLI. Examples: \"fmt\" (package overview), \"fmt.Println\" (one function), \"net/http.Server\" (a type), \"os.File.Read\" (a method). Returns the structured doc (package, signature, body). PREFERRED over `bash go doc`: the result is split into fields for direct access and the output is deterministically capped. Set `all: true` to include unexported symbols.",
 			}, goDocFunc(gate, cfg))
 		}},
+		{"go_build", "Build Go packages; return structured compile errors.", func() (tool.Tool, error) {
+			return functiontool.New(functiontool.Config{
+				Name:        "go_build",
+				Description: "Run `go build <pattern>` (default ./...). Returns {passed, errors: [{file, line, col, message}], body}. PREFERRED over `bash go build ./...`: errors are pre-parsed into file/line triples the agent can feed directly into edit_file without re-grepping raw output. Use this after every meaningful code edit to verify the build still works — the failure list is the next set of things to fix.",
+			}, goBuildFunc(gate, cfg))
+		}},
+		{"go_vet", "Run go vet; return structured findings.", func() (tool.Tool, error) {
+			return functiontool.New(functiontool.Config{
+				Name:        "go_vet",
+				Description: "Run `go vet <pattern>` (default ./...). Same result shape as go_build: {passed, errors: [{file, line, col, message}], body}. PREFERRED over `bash go vet`: same reasons — structured findings feed directly into edit_file. Vet catches subtle correctness bugs (printf format mismatches, lost return values, etc.) the compiler doesn't.",
+			}, goVetFunc(gate, cfg))
+		}},
+		{"go_test", "Run go test; return per-package + per-test results.", func() (tool.Tool, error) {
+			return functiontool.New(functiontool.Config{
+				Name:        "go_test",
+				Description: "Run `go test <pattern>` (default ./...). Returns {passed, packages: [{package, status, seconds, cached}], failures: [{package, test, output}], body}. Optional fields: `run` (regex; mirrors `go test -run`), `verbose` (-v), `race` (-race; significantly slower). PREFERRED over `bash go test`: per-package pass/fail roll-up + per-test failure context come back as a structured list, not raw text the agent has to parse line-by-line.",
+			}, goTestFunc(gate, cfg))
+		}},
 		{"bash", "Run a shell command and return its output.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
 				Name: "bash",
