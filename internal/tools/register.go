@@ -55,12 +55,14 @@ func Build(cfg *config.Config, gate *permissions.Gate) (*Registry, error) {
 		}},
 		{"write_file", "Write or overwrite a file with the given content.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
-				Name: "write_file", Description: "Create or overwrite a file. Asks for confirmation in 'ask' mode.",
+				Name:        "write_file",
+				Description: "Create or overwrite a file atomically with the full content provided. The ONLY sanctioned full-file write path — do not use `bash` with redirects (`cat <<EOF > file`, `echo > file`, `awk '...' > file`) to write files; those are unreliable and leave orphan files when intermediate steps fail. For partial / targeted edits use edit_file instead. Asks for confirmation in 'ask' mode.",
 			}, writeFileFunc(gate))
 		}},
 		{"edit_file", "Replace one occurrence of an exact string in a file.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
-				Name: "edit_file", Description: "Replace exactly one occurrence of old_string with new_string in path.",
+				Name:        "edit_file",
+				Description: "Replace exactly one occurrence of old_string with new_string in path. The ONLY sanctioned in-place edit path — do not use `bash sed -i`, `bash awk '...' > file`, or similar shell rewrites; those leave orphan files when redirects misfire. If old_string isn't unique, either grep for a more specific snippet OR read the full file and use write_file with the new content. If you need to insert content at a pattern without an exact-string anchor, read + write_file is the safe path until cogo ships dedicated insert tools.",
 			}, editFileFunc(gate))
 		}},
 		{"list_dir", "List entries of a directory.", func() (tool.Tool, error) {
@@ -89,8 +91,18 @@ func Build(cfg *config.Config, gate *permissions.Gate) (*Registry, error) {
 		}},
 		{"bash", "Run a shell command and return its output.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
-				Name:        "bash",
-				Description: "Execute a shell command via /bin/sh -c with a timeout. For code investigation (reads, searches, listings, file discovery) prefer the structured tools: read_file, read_many_files, grep, glob, list_dir — they honor the permission gate consistently and truncate output predictably. Use bash for actions the structured tools cannot perform (running builds/tests, invoking the package manager, kicking off git operations, etc.).",
+				Name: "bash",
+				Description: "Execute a shell command via /bin/sh -c with a timeout. Reserved for actions the structured tools cannot perform: builds, tests, linters, package managers, git operations, mkdir/mv/cp/rm. " +
+					"\n\n" +
+					"DO NOT use bash for reading, writing, or editing files. The following patterns are forbidden because they bypass the structured tools and produce unreliable results (orphan files when intermediate steps fail, no truncation, no consistent gate enforcement):\n" +
+					"  - `cat file`, `head file`, `tail file`        → use read_file\n" +
+					"  - `cat <<EOF > file`, `echo ... > file`       → use write_file\n" +
+					"  - `awk '...' > file`, `sed -i 's/.../.../'`   → use edit_file (or write_file for a full rewrite)\n" +
+					"  - `python3 -c \"open(...)\"`                    → use write_file / edit_file\n" +
+					"  - `ls`, `find -name`                          → use list_dir / glob\n" +
+					"  - `grep -r`, `rg`, `ag`                       → use grep\n" +
+					"\n" +
+					"For code investigation always reach for the structured tools first. If you find yourself wanting to chain bash with pipes/redirects to modify files, that is a signal you should be using read_file + write_file / edit_file instead.",
 			}, bashFunc(gate, cfg))
 		}},
 		{"todo", "Maintain an agent-facing todo list (list/add/set_status/clear).", func() (tool.Tool, error) {
