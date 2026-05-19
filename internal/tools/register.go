@@ -89,6 +89,12 @@ func Build(cfg *config.Config, gate *permissions.Gate) (*Registry, error) {
 				Description: "Read several files in a single tool call. Takes an explicit `paths` list and/or a `pattern` glob (walked from `root`, default cwd). Returns {path, content} per file with per-file truncation and a batch-level cap. PREFERRED over multiple read_file calls when you need to read N files at once — one batched call is more token-efficient and lets the runner serve them in parallel.",
 			}, readManyFilesFunc(gate, cfg))
 		}},
+		{"go_doc", "Fetch Go package or symbol documentation.", func() (tool.Tool, error) {
+			return functiontool.New(functiontool.Config{
+				Name:        "go_doc",
+				Description: "Look up Go documentation for a package, symbol, or pkg.Symbol — same target syntax as the `go doc` CLI. Examples: \"fmt\" (package overview), \"fmt.Println\" (one function), \"net/http.Server\" (a type), \"os.File.Read\" (a method). Returns the structured doc (package, signature, body). PREFERRED over `bash go doc`: the result is split into fields for direct access and the output is deterministically capped. Set `all: true` to include unexported symbols.",
+			}, goDocFunc(gate, cfg))
+		}},
 		{"bash", "Run a shell command and return its output.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
 				Name: "bash",
