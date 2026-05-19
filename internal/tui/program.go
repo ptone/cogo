@@ -233,12 +233,37 @@ func Run(ctx context.Context, cfg *config.Config, agentsDir string) (int, error)
 	}
 
 	// Wire the gate's session approval log + the .agents/config.json
-	// persistence path so the /permissions slash command can review
-	// approvals and persist recommended allowlist entries.
+	// persistence path so the /permissions, /allow, and /deny slash
+	// commands can persist patterns AND patch the live gate in one
+	// shot — no /reload needed for additions to take effect.
 	m.SessionApprovals = gate.Approvals
 	if agentsDir != "" {
-		m.PersistAllowPatterns = func(patterns []string) error {
+		m.AddAllowPatterns = func(patterns []string) error {
+			if err := gate.AddAllowPatterns(patterns); err != nil {
+				return err
+			}
 			return appendPermissionsAllow(agentsDir, patterns)
+		}
+		m.AddDenyPatterns = func(patterns []string) error {
+			if err := gate.AddDenyPatterns(patterns); err != nil {
+				return err
+			}
+			return appendPermissionsDeny(agentsDir, patterns)
+		}
+		m.AddBuiltinAllowExtra = func(name string) error {
+			entries, ok := permissions.Bundles[name]
+			if !ok {
+				return fmt.Errorf("unknown bundle %q (want one of %v)", name, permissions.KnownBundles())
+			}
+			// Patch the live gate with the bundle's expanded entries.
+			// We feed them through AddAllowPatterns rather than
+			// AddBuiltinAllowExtras so the policy actually changes;
+			// the persisted form in cogo.json is still the bundle
+			// name, not the expansion (intent-preserving).
+			if err := gate.AddAllowPatterns(entries); err != nil {
+				return err
+			}
+			return appendBuiltinAllowExtra(agentsDir, name)
 		}
 	}
 
@@ -358,5 +383,45 @@ func appendPermissionsAllow(agentsDir string, patterns []string) error {
 		cfg.Permissions.Allow = append(cfg.Permissions.Allow, p)
 		existing[p] = true
 	}
+	return config.Save(filepath.Join(agentsDir, config.ConfigFileName), cfg)
+}
+
+// appendPermissionsDeny mirrors appendPermissionsAllow for the deny
+// list. Idempotent.
+func appendPermissionsDeny(agentsDir string, patterns []string) error {
+	cfg, err := config.Load(agentsDir)
+	if err != nil {
+		return err
+	}
+	existing := make(map[string]bool, len(cfg.Permissions.Deny))
+	for _, p := range cfg.Permissions.Deny {
+		existing[p] = true
+	}
+	for _, p := range patterns {
+		if existing[p] {
+			continue
+		}
+		cfg.Permissions.Deny = append(cfg.Permissions.Deny, p)
+		existing[p] = true
+	}
+	return config.Save(filepath.Join(agentsDir, config.ConfigFileName), cfg)
+}
+
+// appendBuiltinAllowExtra adds name to
+// .agents/config.json's permissions.builtin_allow_extras list.
+// Idempotent — re-enabling a bundle that's already on is a no-op.
+// Validation against the bundle catalog happens in the caller so an
+// invalid name surfaces before disk I/O.
+func appendBuiltinAllowExtra(agentsDir, name string) error {
+	cfg, err := config.Load(agentsDir)
+	if err != nil {
+		return err
+	}
+	for _, existing := range cfg.Permissions.BuiltinAllowExtras {
+		if existing == name {
+			return nil
+		}
+	}
+	cfg.Permissions.BuiltinAllowExtras = append(cfg.Permissions.BuiltinAllowExtras, name)
 	return config.Save(filepath.Join(agentsDir, config.ConfigFileName), cfg)
 }

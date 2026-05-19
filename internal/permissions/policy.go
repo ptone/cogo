@@ -6,6 +6,7 @@ package permissions
 import (
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // Policy interprets the allow/deny pattern lists from
@@ -21,6 +22,11 @@ import (
 // tool: for bash it is the command string, for file tools it is the
 // resolved absolute path. Wildcards work the same for both.
 type Policy struct {
+	// mu guards allow/deny so the /allow and /deny slash commands can
+	// extend the live policy mid-session without racing with concurrent
+	// Match calls from tool handler goroutines. RWMutex because Match
+	// is hot (every gated tool call) and additions are rare.
+	mu    sync.RWMutex
 	allow []rule
 	deny  []rule
 }
@@ -79,6 +85,8 @@ const (
 // OutcomeAllow if any allow rule matches and no deny rule matches,
 // otherwise OutcomeUnmatched. Deny always wins.
 func (p *Policy) Match(tool, key string) Outcome {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	if matchAny(p.deny, tool, key) {
 		return OutcomeDeny
 	}
@@ -86,6 +94,53 @@ func (p *Policy) Match(tool, key string) Outcome {
 		return OutcomeAllow
 	}
 	return OutcomeUnmatched
+}
+
+// AddAllow validates and appends patterns to the allow set. Existing
+// patterns are skipped (idempotent — the /allow slash command can be
+// retried without growing the policy). Bad patterns abort the whole
+// call without partial mutation so the on-disk config and the live
+// policy stay in sync after a failed parse.
+func (p *Policy) AddAllow(patterns []string) error {
+	added, err := parseRules(patterns)
+	if err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, r := range added {
+		if containsRule(p.allow, r) {
+			continue
+		}
+		p.allow = append(p.allow, r)
+	}
+	return nil
+}
+
+// AddDeny is the symmetric extension for deny rules.
+func (p *Policy) AddDeny(patterns []string) error {
+	added, err := parseRules(patterns)
+	if err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, r := range added {
+		if containsRule(p.deny, r) {
+			continue
+		}
+		p.deny = append(p.deny, r)
+	}
+	return nil
+}
+
+func containsRule(rs []rule, r rule) bool {
+	for _, existing := range rs {
+		if existing.tool == r.tool && existing.pat == r.pat {
+			return true
+		}
+	}
+	return false
 }
 
 func matchAny(rules []rule, tool, key string) bool {

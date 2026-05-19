@@ -149,6 +149,22 @@ func FromConfig(cfg *config.Config, projectRoot, userRoot string, prompter Promp
 // Mode reports the active permission mode.
 func (g *Gate) Mode() Mode { return g.mode }
 
+// AddAllowPatterns extends the live policy with additional allow
+// patterns and is safe to call concurrently with in-flight Match
+// calls. Used by the /allow slash command to make new permissions
+// take effect immediately rather than only after a restart. Returns
+// the same error shape as NewPolicy when a pattern is malformed.
+func (g *Gate) AddAllowPatterns(patterns []string) error {
+	return g.policy.AddAllow(patterns)
+}
+
+// AddDenyPatterns is the symmetric extension for deny entries, used
+// by /deny. Deny always wins in Match so adding here can override a
+// previously-allowed pattern mid-session.
+func (g *Gate) AddDenyPatterns(patterns []string) error {
+	return g.policy.AddDeny(patterns)
+}
+
 // Scope exposes the path scope. Callers that mutate the scope should
 // also persist the change via the config layer.
 func (g *Gate) Scope() *PathScope { return g.scope }

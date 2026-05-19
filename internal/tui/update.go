@@ -697,7 +697,11 @@ func (m *Model) handleSlash(action SlashAction, cmd, args string) (tea.Model, te
 	case SlashMouse:
 		return m.handleMouseCommand(args)
 	case SlashPermissions:
-		return m.handlePermissionsCommand()
+		return m.handlePermissionsCommand(args)
+	case SlashAllow:
+		return m.handleAllowCommand(args)
+	case SlashDeny:
+		return m.handleDenyCommand(args)
 	case SlashModel:
 		return m.handleModelCommand(args)
 	case SlashQuit:
@@ -857,10 +861,18 @@ func (m *Model) handleStreamChunk(msg streamChunkMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handlePermissionsCommand opens the /permissions review picker.
-// With no approval log yet, it short-circuits to a system message
-// so the user isn't met with an empty modal.
-func (m *Model) handlePermissionsCommand() (tea.Model, tea.Cmd) {
+// handlePermissionsCommand dispatches on the optional sub-action.
+// Bare /permissions opens the review picker; /permissions list prints
+// a read-only snapshot of the current allow/deny/bundle config. Any
+// other argument falls through to the picker so we don't surprise
+// users who type /permissions <typo>.
+func (m *Model) handlePermissionsCommand(args string) (tea.Model, tea.Cmd) {
+	switch strings.TrimSpace(args) {
+	case "list", "show", "ls":
+		m.history.Append(Message{Role: RoleSystem, Text: m.renderPermissionsListInfo()})
+		m.refreshViewport()
+		return m, nil
+	}
 	if m.SessionApprovals == nil {
 		m.history.Append(Message{Role: RoleSystem, Text: "Permissions review unavailable: this build has no session approval log wired up."})
 		m.refreshViewport()
@@ -869,12 +881,138 @@ func (m *Model) handlePermissionsCommand() (tea.Model, tea.Cmd) {
 	approvals := m.SessionApprovals()
 	picker := newPermissionsPicker(approvals)
 	if picker == nil {
-		m.history.Append(Message{Role: RoleSystem, Text: "No interactive approvals this session yet — there's nothing to review."})
+		m.history.Append(Message{Role: RoleSystem, Text: "No interactive approvals this session yet — there's nothing to review. Use /allow <pattern> to pre-approve patterns up front, or /permissions list to see what's already configured."})
 		m.refreshViewport()
 		return m, nil
 	}
 	m.permissionsPicker = picker
 	return m, nil
+}
+
+// handleAllowCommand handles `/allow <pattern>` and `/allow bundle:<name>`.
+// Both paths validate first so the user gets a clear error before
+// anything touches cogo.json or the live gate.
+func (m *Model) handleAllowCommand(args string) (tea.Model, tea.Cmd) {
+	arg := strings.TrimSpace(args)
+	if arg == "" {
+		m.history.Append(Message{Role: RoleSystem, Text: "Usage: /allow <pattern>   e.g. /allow bash:git *   or   /allow bundle:dev_tools"})
+		m.refreshViewport()
+		return m, nil
+	}
+	if name, ok := strings.CutPrefix(arg, "bundle:"); ok {
+		return m.applyAllowBundle(strings.TrimSpace(name))
+	}
+	return m.applyAllowPattern(arg)
+}
+
+// handleDenyCommand persists a deny pattern. Deny always wins in the
+// policy so adding here is the right escape hatch when the LLM finds
+// a way to chain destructively through a previously-allowed verb.
+func (m *Model) handleDenyCommand(args string) (tea.Model, tea.Cmd) {
+	arg := strings.TrimSpace(args)
+	if arg == "" {
+		m.history.Append(Message{Role: RoleSystem, Text: "Usage: /deny <pattern>   e.g. /deny bash:curl *"})
+		m.refreshViewport()
+		return m, nil
+	}
+	if m.AddDenyPatterns == nil {
+		m.history.Append(Message{Role: RoleError, Text: "Can't persist deny patterns: no project root for .agents/config.json. Run cogo from a directory with an .agents/ folder."})
+		m.refreshViewport()
+		return m, nil
+	}
+	if err := m.AddDenyPatterns([]string{arg}); err != nil {
+		m.history.Append(Message{Role: RoleError, Text: "Couldn't add deny pattern: " + err.Error()})
+		m.refreshViewport()
+		return m, nil
+	}
+	m.history.Append(Message{Role: RoleSystem, Text: "Added to .agents/config.json permissions.deny:\n  " + arg + "\n(applies now; deny wins over any allow rule.)"})
+	m.refreshViewport()
+	return m, nil
+}
+
+func (m *Model) applyAllowPattern(pattern string) (tea.Model, tea.Cmd) {
+	if m.AddAllowPatterns == nil {
+		m.history.Append(Message{Role: RoleError, Text: "Can't persist allow patterns: no project root for .agents/config.json. Run cogo from a directory with an .agents/ folder."})
+		m.refreshViewport()
+		return m, nil
+	}
+	if err := m.AddAllowPatterns([]string{pattern}); err != nil {
+		m.history.Append(Message{Role: RoleError, Text: "Couldn't add allow pattern: " + err.Error()})
+		m.refreshViewport()
+		return m, nil
+	}
+	m.history.Append(Message{Role: RoleSystem, Text: "Added to .agents/config.json permissions.allow:\n  " + pattern + "\n(applies immediately — no /reload needed.)"})
+	m.refreshViewport()
+	return m, nil
+}
+
+func (m *Model) applyAllowBundle(name string) (tea.Model, tea.Cmd) {
+	if name == "" {
+		m.history.Append(Message{Role: RoleSystem, Text: "Usage: /allow bundle:<name>   known bundles: " + strings.Join(permissions.KnownBundles(), ", ")})
+		m.refreshViewport()
+		return m, nil
+	}
+	if m.AddBuiltinAllowExtra == nil {
+		m.history.Append(Message{Role: RoleError, Text: "Can't enable bundle: no project root for .agents/config.json. Run cogo from a directory with an .agents/ folder."})
+		m.refreshViewport()
+		return m, nil
+	}
+	if err := m.AddBuiltinAllowExtra(name); err != nil {
+		m.history.Append(Message{Role: RoleError, Text: "Couldn't enable bundle: " + err.Error()})
+		m.refreshViewport()
+		return m, nil
+	}
+	m.history.Append(Message{Role: RoleSystem, Text: fmt.Sprintf("Enabled bundle %q in .agents/config.json (permissions.builtin_allow_extras).\n(applies immediately.)", name)})
+	m.refreshViewport()
+	return m, nil
+}
+
+// renderPermissionsListInfo returns a read-only snapshot of the
+// current permissions config as a multi-line string. Mirrors the
+// /memory and /stats info-style commands so the output lands in the
+// chat history rather than a modal.
+func (m *Model) renderPermissionsListInfo() string {
+	pc := m.cfg.Permissions
+	useBuiltin := true
+	if pc.UseBuiltinAllow != nil {
+		useBuiltin = *pc.UseBuiltinAllow
+	}
+	mode := pc.Mode
+	if mode == "" {
+		mode = "ask"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Permission mode: %s\n", mode)
+	fmt.Fprintf(&b, "Built-in allow: %s\n", boolOnOff(useBuiltin))
+	if len(pc.BuiltinAllowExtras) > 0 {
+		fmt.Fprintf(&b, "  extra bundles: %s\n", strings.Join(pc.BuiltinAllowExtras, ", "))
+	}
+	if useBuiltin {
+		fmt.Fprintf(&b, "  (read_only baseline always active; known bundles: %s)\n", strings.Join(permissions.KnownBundles(), ", "))
+	}
+	b.WriteString("\n")
+	writePatternList(&b, "permissions.allow", pc.Allow)
+	b.WriteString("\n")
+	writePatternList(&b, "permissions.deny", pc.Deny)
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func writePatternList(b *strings.Builder, label string, patterns []string) {
+	if len(patterns) == 0 {
+		fmt.Fprintf(b, "%s: (empty)\n", label)
+		return
+	}
+	fmt.Fprintf(b, "%s (%d):\n", label, len(patterns))
+	for _, p := range patterns {
+		fmt.Fprintf(b, "  %s\n", p)
+	}
+}
+
+func boolOnOff(b bool) string {
+	if b {
+		return "enabled"
+	}
+	return "disabled"
 }
 
 // handlePermissionsPickerKey runs while the /permissions overlay is
@@ -908,12 +1046,12 @@ func (m *Model) handlePermissionsPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 			m.refreshViewport()
 			return m, nil
 		}
-		if m.PersistAllowPatterns == nil {
+		if m.AddAllowPatterns == nil {
 			m.history.Append(Message{Role: RoleError, Text: "Can't persist allowlist entries: no project root for .agents/config.json. Run cogo from a directory with an .agents/ folder."})
 			m.refreshViewport()
 			return m, nil
 		}
-		if err := m.PersistAllowPatterns(patterns); err != nil {
+		if err := m.AddAllowPatterns(patterns); err != nil {
 			m.history.Append(Message{Role: RoleError, Text: "Persist failed: " + err.Error()})
 			m.refreshViewport()
 			return m, nil

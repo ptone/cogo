@@ -20,6 +20,8 @@ const (
 	SlashReload      SlashAction = "reload"
 	SlashMouse       SlashAction = "mouse"
 	SlashPermissions SlashAction = "permissions"
+	SlashAllow       SlashAction = "allow"
+	SlashDeny        SlashAction = "deny"
 	SlashUnknown     SlashAction = "unknown"
 )
 
@@ -42,6 +44,8 @@ var slashAliases = map[string]SlashAction{
 	"mouse":       SlashMouse,
 	"permissions": SlashPermissions,
 	"perms":       SlashPermissions,
+	"allow":       SlashAllow,
+	"deny":        SlashDeny,
 }
 
 // ParseSlash inspects input. If it looks like a slash command (leading
@@ -100,6 +104,10 @@ func HelpText() string {
 		"  /reload     re-read .agents/ from disk (mcp.json, skills/, AGENTS.md, config.json)",
 		"  /mouse      toggle mouse-wheel scrolling (or /mouse on|off)",
 		"  /permissions  review session approvals + add recommended allowlist entries (alias: /perms)",
+		"  /permissions list  show current allow/deny patterns and enabled built-in bundles",
+		"  /allow <pattern>   append a pattern to permissions.allow and apply now (e.g. /allow bash:git *)",
+		"  /allow bundle:<name>  enable a built-in bundle (dev_tools, cogo_tools)",
+		"  /deny  <pattern>   append a pattern to permissions.deny and apply now",
 		"",
 		"Keys:",
 		"  PgUp/PgDn   scroll chat history",

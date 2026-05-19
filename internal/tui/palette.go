@@ -62,6 +62,9 @@ func allSlashItems() []paletteItem {
 		{Display: "/reload", Value: "/reload", Hint: "re-read .agents/ from disk"},
 		{Display: "/mouse", Value: "/mouse", Hint: "toggle mouse-wheel scrolling"},
 		{Display: "/permissions", Value: "/permissions", Hint: "review approvals + persist recommended allowlist"},
+		{Display: "/permissions list", Value: "/permissions list", Hint: "show current allow/deny + built-in bundles"},
+		{Display: "/allow", Value: "/allow ", Hint: "add a pattern (e.g. /allow bash:git *) or bundle (/allow bundle:dev_tools)"},
+		{Display: "/deny", Value: "/deny ", Hint: "add a deny pattern (e.g. /deny bash:curl *)"},
 		{Display: "/clear", Value: "/clear", Hint: "clear chat history"},
 		{Display: "/quit", Value: "/quit", Hint: "exit Cogo"},
 	}

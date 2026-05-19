@@ -23,7 +23,6 @@ import (
 	"github.com/go-steer/cogo/internal/memory"
 	"github.com/go-steer/cogo/internal/permissions"
 	"github.com/go-steer/cogo/internal/testutil"
-	"github.com/go-steer/cogo/internal/tuiagent"
 )
 
 // newTestModel constructs a TUI model wired to a FakeModel-backed agent
@@ -38,7 +37,7 @@ func newTestModel(t *testing.T, script []testutil.ScriptedResponse) *teatest.Tes
 	if err != nil {
 		t.Fatalf("agent.New: %v", err)
 	}
-	m := NewModel(cfg, a.AsTUI(), "dark")
+	m := NewModel(cfg, a, "dark")
 	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(80, 24))
 	m.SetProgram(tm.GetProgram())
 	return tm
@@ -55,7 +54,7 @@ func newTestModelExposed(t *testing.T, script []testutil.ScriptedResponse) (*Mod
 	if err != nil {
 		t.Fatalf("agent.New: %v", err)
 	}
-	m := NewModel(cfg, a.AsTUI(), "dark")
+	m := NewModel(cfg, a, "dark")
 	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(80, 24))
 	m.SetProgram(tm.GetProgram())
 	return m, tm
@@ -141,7 +140,7 @@ func TestProgram_Reload_InstallsResult(t *testing.T) {
 		called.Add(1)
 		newAgent, _ := agent.New(&testutil.FakeModel{ModelName: "after"})
 		return reloadResult{
-			Agent:  newAgent.AsTUI(),
+			Agent:  newAgent,
 			Memory: memory.Loaded{Sources: []memory.Source{{Scope: "project", Path: "/tmp/AGENTS.md", Bytes: 10}}},
 		}, nil
 	}
@@ -275,14 +274,10 @@ func TestProgram_ModelPickerAndDirectSwitch(t *testing.T) {
 	// goroutine and the read from the test goroutine synchronize
 	// properly under -race.
 	var rebuilt atomic.Pointer[string]
-	m.rebuildAgent = func(id string) (tuiagent.Agent, error) {
+	m.rebuildAgent = func(id string) (*agent.Agent, error) {
 		copyID := id
 		rebuilt.Store(&copyID)
-		built, err := agent.New(&testutil.FakeModel{ModelName: id})
-		if err != nil {
-			return nil, err
-		}
-		return built.AsTUI(), nil
+		return agent.New(&testutil.FakeModel{ModelName: id})
 	}
 
 	// Bare /model opens the picker.

@@ -25,7 +25,7 @@ func TestPermissionsPicker_EmptyApprovalsShowsMessage(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
 	m.SessionApprovals = func() []permissions.ApprovalLog { return nil }
 
-	m.handlePermissionsCommand()
+	m.handlePermissionsCommand("")
 	if m.permissionsPicker != nil {
 		t.Fatalf("picker should NOT open with zero approvals; got %+v", m.permissionsPicker)
 	}
@@ -37,7 +37,7 @@ func TestPermissionsPicker_EmptyApprovalsShowsMessage(t *testing.T) {
 
 // TestPermissionsPicker_TogglesAndPersistsChosen pins the full flow:
 // recommendations land in the picker, space toggles them, enter
-// invokes PersistAllowPatterns with the toggled-on patterns ONLY.
+// invokes AddAllowPatterns with the toggled-on patterns ONLY.
 //
 // DO NOT silence this test. Both halves matter: if toggle gets
 // inverted, users persist patterns they didn't pick; if persist
@@ -58,12 +58,12 @@ func TestPermissionsPicker_TogglesAndPersistsChosen(t *testing.T) {
 	}
 
 	var persisted []string
-	m.PersistAllowPatterns = func(patterns []string) error {
+	m.AddAllowPatterns = func(patterns []string) error {
 		persisted = append(persisted, patterns...)
 		return nil
 	}
 
-	m.handlePermissionsCommand()
+	m.handlePermissionsCommand("")
 	if m.permissionsPicker == nil {
 		t.Fatalf("picker should open with non-empty approval log")
 	}
@@ -77,14 +77,14 @@ func TestPermissionsPicker_TogglesAndPersistsChosen(t *testing.T) {
 	if !p.selected[0] {
 		t.Errorf("space did not toggle row 0 on")
 	}
-	// Press enter; the picker closes and PersistAllowPatterns gets
+	// Press enter; the picker closes and AddAllowPatterns gets
 	// called with exactly the chosen pattern.
 	m.handlePermissionsPickerKey(tea.KeyMsg{Type: tea.KeyEnter})
 	if m.permissionsPicker != nil {
 		t.Errorf("picker should close on enter; got %+v", m.permissionsPicker)
 	}
 	if len(persisted) != 1 {
-		t.Fatalf("PersistAllowPatterns called with %d patterns; want exactly 1\ngot: %v", len(persisted), persisted)
+		t.Fatalf("AddAllowPatterns called with %d patterns; want exactly 1\ngot: %v", len(persisted), persisted)
 	}
 	if persisted[0] != p.recs[0].Pattern {
 		t.Errorf("persisted pattern = %q; want toggled-on row %q", persisted[0], p.recs[0].Pattern)
@@ -93,7 +93,7 @@ func TestPermissionsPicker_TogglesAndPersistsChosen(t *testing.T) {
 
 // TestPermissionsPicker_EnterWithNothingSelectedNoOps covers the
 // "user opened the picker, looked, decided nothing to add" path:
-// PersistAllowPatterns must NOT be called with an empty list.
+// AddAllowPatterns must NOT be called with an empty list.
 func TestPermissionsPicker_EnterWithNothingSelectedNoOps(t *testing.T) {
 	t.Parallel()
 	cfg := config.DefaultConfig()
@@ -106,13 +106,13 @@ func TestPermissionsPicker_EnterWithNothingSelectedNoOps(t *testing.T) {
 		}
 	}
 	called := false
-	m.PersistAllowPatterns = func(patterns []string) error {
+	m.AddAllowPatterns = func(patterns []string) error {
 		called = true
 		return nil
 	}
-	m.handlePermissionsCommand()
+	m.handlePermissionsCommand("")
 	m.handlePermissionsPickerKey(tea.KeyMsg{Type: tea.KeyEnter}) // no toggles
 	if called {
-		t.Errorf("PersistAllowPatterns should not fire when nothing was toggled on")
+		t.Errorf("AddAllowPatterns should not fire when nothing was toggled on")
 	}
 }

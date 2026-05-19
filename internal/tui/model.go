@@ -164,12 +164,24 @@ type Model struct {
 	// that case /permissions reports nothing-to-review.
 	SessionApprovals func() []permissions.ApprovalLog
 
-	// PersistAllowPatterns appends one or more allowlist patterns to
-	// .agents/config.json's permissions.allow block. The picker calls
-	// it when the user confirms their selection. May be nil when
-	// running without a project root; the picker reports the lack of
-	// persistence to the user as a system message.
-	PersistAllowPatterns func(patterns []string) error
+	// AddAllowPatterns appends one or more allowlist patterns to
+	// .agents/config.json's permissions.allow block AND patches the
+	// live gate so the additions take effect for the rest of this
+	// session (no /reload needed). Called by the /permissions picker
+	// and the /allow slash command. May be nil when running without a
+	// project root; callers should report the lack of persistence to
+	// the user as a system message.
+	AddAllowPatterns func(patterns []string) error
+
+	// AddDenyPatterns is the symmetric extension for permissions.deny,
+	// driven by /deny. Same nil semantics as AddAllowPatterns.
+	AddDenyPatterns func(patterns []string) error
+
+	// AddBuiltinAllowExtra appends a bundle name to
+	// permissions.builtin_allow_extras AND injects that bundle's
+	// patterns into the live gate. Used by /allow bundle:<name>.
+	// May be nil when running without a project root.
+	AddBuiltinAllowExtra func(name string) error
 }
 
 // NewModel constructs a fresh chat session bound to a configured agent.
