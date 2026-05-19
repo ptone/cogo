@@ -113,6 +113,12 @@ func Build(cfg *config.Config, gate *permissions.Gate) (*Registry, error) {
 				Description: "Run `go test <pattern>` (default ./...). Returns {passed, packages: [{package, status, seconds, cached}], failures: [{package, test, output}], body}. Optional fields: `run` (regex; mirrors `go test -run`), `verbose` (-v), `race` (-race; significantly slower). PREFERRED over `bash go test`: per-package pass/fail roll-up + per-test failure context come back as a structured list, not raw text the agent has to parse line-by-line.",
 			}, goTestFunc(gate, cfg))
 		}},
+		{"go_symbol_find", "Find Go symbol definitions across a module.", func() (tool.Tool, error) {
+			return functiontool.New(functiontool.Config{
+				Name:        "go_symbol_find",
+				Description: "AST-based lookup: find where a Go identifier is DEFINED (funcs, methods, types, interfaces, vars, consts). Returns [{path, line, kind, name, receiver, signature}] for every matching definition under `path` (default cwd). PREFERRED over `grep -rn \"type Foo\"` / `grep -rn \"func Bar\"`: handles multi-line declarations, distinguishes definitions from references, knows about method receivers, skips _test.go by default. `match` modes: exact (default), prefix, substring. Skips .git/.svn/.hg/node_modules/vendor.",
+			}, goSymbolFindFunc(gate, cfg))
+		}},
 		{"bash", "Run a shell command and return its output.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
 				Name: "bash",
