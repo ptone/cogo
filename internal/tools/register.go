@@ -79,6 +79,12 @@ func Build(cfg *config.Config, gate *permissions.Gate) (*Registry, error) {
 				Description: "Walk a directory and return every line matching an RE2 regular expression. Single-file mode when the path is a regular file. Honors the permission gate and the configured output caps; skips .git/.svn/.hg/node_modules/vendor.",
 			}, grepFunc(gate, cfg))
 		}},
+		{"read_many_files", "Read multiple files in one call.", func() (tool.Tool, error) {
+			return functiontool.New(functiontool.Config{
+				Name:        "read_many_files",
+				Description: "Read several files in a single tool call. Takes an explicit `paths` list and/or a `pattern` glob (walked from `root`, default cwd). Returns {path, content} per file with per-file truncation and a batch-level cap. Prefer over multiple read_file calls when gathering context from a known set of files.",
+			}, readManyFilesFunc(gate, cfg))
+		}},
 		{"bash", "Run a shell command and return its output.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
 				Name: "bash", Description: "Execute a shell command via /bin/sh -c with a timeout.",
