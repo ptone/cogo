@@ -44,9 +44,43 @@ uat_ref() {
   echo "${UAT_REF:-v0.3.0}"
 }
 
+# uat_require_creds bails out with a useful hint when the env lacks
+# the auth needed for cogo to reach Gemini/Vertex. Without this the
+# binary aborts at config-resolution and traces end up empty (#75
+# follow-up: that's how the gap was first noticed).
+#
+# Safe to call repeatedly; cheap (just env lookups).
+uat_require_creds() {
+  if [[ -n "${GOOGLE_API_KEY:-}" ]]; then
+    return 0
+  fi
+  if [[ "${GOOGLE_GENAI_USE_VERTEXAI:-}" == "true" && -n "${GOOGLE_CLOUD_PROJECT:-}" ]]; then
+    return 0
+  fi
+  cat >&2 <<'EOF'
+uat: no Gemini/Vertex credentials in env. cogo aborts at
+     config-resolution without auth and every trace ends up empty.
+
+cogo accepts one of:
+  GOOGLE_API_KEY=<key>
+      public Gemini API
+  GOOGLE_GENAI_USE_VERTEXAI=true GOOGLE_CLOUD_PROJECT=<project>
+      Vertex AI (also requires Application Default Credentials —
+      e.g. `gcloud auth application-default login`)
+
+If you have a local helper script that exports these, source it
+first. For example:
+  source ~/scripts/gemini.sh && unset GEMINI_API_KEY
+EOF
+  return 2
+}
+
 # uat_setup_clone makes a fresh clone in a temp dir and cd's there.
-# Exports UAT_WORKDIR so uat_cleanup can find it.
+# Exports UAT_WORKDIR so uat_cleanup can find it. Refuses to clone
+# (and so refuses to do any further work) when creds are missing —
+# the throwaway clone is cheap but pointless without auth.
 uat_setup_clone() {
+  uat_require_creds || return 2
   UAT_WORKDIR="$(mktemp -d -t cogo-uat-XXXXXX)"
   export UAT_WORKDIR
   git clone --quiet --depth 1 --branch "$(uat_ref)" "$(uat_repo_url)" "$UAT_WORKDIR" 2>&1 \

@@ -23,6 +23,14 @@ set -u
 UAT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$UAT_DIR"
 
+# Source the helpers and fail fast on missing creds — running through
+# the whole UAT list to discover at the end that none of them could
+# reach the model is the worst path. Each individual run.sh also
+# preflights via uat_setup_clone, but this runs once up front so the
+# umbrella stops before doing any work.
+. "$UAT_DIR/lib/common.sh"
+uat_require_creds || exit $?
+
 declare -a all_uats
 for d in uat-*/; do
   all_uats+=("${d%/}")
