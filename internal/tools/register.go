@@ -15,8 +15,10 @@ import (
 
 // Registry is the assembled built-in tool set returned to the agent.
 //
-// Slice 3 ships file I/O, bash, and todo. Web tools, glob/grep, and
-// the subagent tool follow in later slices.
+// Slice 3 ships file I/O, bash, and todo. v0.3.0 added glob + grep
+// (item 2 of docs/gemini-tooling-plan.md) so Gemini agents don't fall
+// back to `bash grep` for every code search. Web tools and the
+// subagent tool follow in later slices.
 type Registry struct {
 	Tools []tool.Tool
 	Todo  *TodoStore // exposed so callers can inspect plan progress
@@ -64,6 +66,18 @@ func Build(cfg *config.Config, gate *permissions.Gate) (*Registry, error) {
 			return functiontool.New(functiontool.Config{
 				Name: "list_dir", Description: "List the entries (files and subdirectories) of a directory.",
 			}, listDirFunc(gate, cfg))
+		}},
+		{"glob", "Find files by basename pattern.", func() (tool.Tool, error) {
+			return functiontool.New(functiontool.Config{
+				Name:        "glob",
+				Description: "Walk a directory and return paths whose basename matches a shell-style pattern (e.g. *.go, README.*). Honors the permission gate and the configured output caps; skips .git/.svn/.hg/node_modules/vendor.",
+			}, globFunc(gate, cfg))
+		}},
+		{"grep", "Search file contents with a regex.", func() (tool.Tool, error) {
+			return functiontool.New(functiontool.Config{
+				Name:        "grep",
+				Description: "Walk a directory and return every line matching an RE2 regular expression. Single-file mode when the path is a regular file. Honors the permission gate and the configured output caps; skips .git/.svn/.hg/node_modules/vendor.",
+			}, grepFunc(gate, cfg))
 		}},
 		{"bash", "Run a shell command and return its output.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
