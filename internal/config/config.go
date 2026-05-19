@@ -45,7 +45,7 @@ type PathScopeConfig struct {
 //
 // Provider: "gemini" (public Gemini API, key auth) or "vertex" (Vertex AI,
 // ADC auth). When empty, the resolver auto-detects from environment.
-// Name: a model ID, e.g. "gemini-3.1-pro-preview".
+// Name: a model ID, e.g. "gemini-3.1-pro-preview-customtools".
 // APIKey: optional inline key for Provider="gemini"; usually unset and
 // read from GOOGLE_API_KEY at runtime.
 // Vertex: required when Provider="vertex"; project + location.
@@ -158,7 +158,11 @@ func DefaultConfig() *Config {
 		Version: SchemaVersion,
 		Model: ModelConfig{
 			// Provider intentionally empty — resolver auto-detects from env.
-			Name: "gemini-3.1-pro-preview",
+			// The -customtools variant prefers registered tools over raw
+			// bash. Same price, same context, same reasoning — better
+			// behavior for an agent that ships structured tools (grep,
+			// read_file, etc.). See docs/gemini-tooling-plan.md item 1.
+			Name: "gemini-3.1-pro-preview-customtools",
 		},
 		Permissions: PermissionsConfig{
 			Mode: PermissionModeAsk,

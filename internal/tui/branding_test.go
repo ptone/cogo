@@ -51,9 +51,24 @@ func TestView_HeaderAlwaysShowsBrandAndStatus(t *testing.T) {
 			if !strings.Contains(head, "go-steer / c[o]go") {
 				t.Errorf("first row missing brand wordmark; got %q", head)
 			}
-			// Model name must show on the same row.
+			// Model name must show on the same row. At very-narrow
+			// widths the renderer is allowed to truncate with "…"
+			// (long model IDs like gemini-3.1-pro-preview-customtools
+			// don't fit alongside the brand + status badge in 50
+			// cols); we accept either the full name or a prefix
+			// followed by the ellipsis.
 			if !strings.Contains(head, cfg.Model.Name) {
-				t.Errorf("first row missing model name %q; got %q", cfg.Model.Name, head)
+				// Take a prefix unambiguous enough to identify the
+				// model family but short enough to fit in any
+				// supported width.
+				prefix := cfg.Model.Name
+				if len(prefix) > 16 {
+					prefix = prefix[:16]
+				}
+				if !strings.Contains(head, prefix) || !strings.Contains(head, "…") {
+					t.Errorf("first row missing model name %q (or %q+…); got %q",
+						cfg.Model.Name, prefix, head)
+				}
 			}
 			// Permission mode badge must show on the same row.
 			if !strings.Contains(head, "ask") {

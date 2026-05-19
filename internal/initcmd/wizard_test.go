@@ -54,9 +54,9 @@ func TestWizard_FullHappyPath(t *testing.T) {
 		t.Fatalf("step after provider = %v, want stepModel", m.step)
 	}
 
-	// Step 2: model — default text is "gemini-3.1-pro-preview"; just Enter.
+	// Step 2: model — default text is "gemini-3.1-pro-preview-customtools"; just Enter.
 	m = drive(t, m, "enter")
-	if m.modelName != "gemini-3.1-pro-preview" {
+	if m.modelName != "gemini-3.1-pro-preview-customtools" {
 		t.Fatalf("modelName = %q", m.modelName)
 	}
 	if m.step != stepPermMode {
@@ -136,8 +136,12 @@ func TestWizard_ModelInputAcceptsTyping(t *testing.T) {
 	t.Parallel()
 	m := newWizardModel()
 	m = drive(t, m, "enter") // advance to model step
-	// Clear default and type a custom name.
-	for i := 0; i < 30; i++ {
+	// Clear default and type a custom name. The bound is the textinput's
+	// CharLimit (80) so this works regardless of how long the default
+	// model name grows — bumping the default from 22 to 34 chars when
+	// switching to gemini-3.1-pro-preview-customtools broke the prior
+	// hardcoded 30.
+	for i := 0; i < 80; i++ {
 		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 		m = next.(*wizardModel)
 	}

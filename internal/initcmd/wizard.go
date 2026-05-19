@@ -80,8 +80,8 @@ type wizardModel struct {
 
 func newWizardModel() *wizardModel {
 	ti := textinput.New()
-	ti.Placeholder = "gemini-3.1-pro-preview"
-	ti.SetValue("gemini-3.1-pro-preview")
+	ti.Placeholder = "gemini-3.1-pro-preview-customtools"
+	ti.SetValue("gemini-3.1-pro-preview-customtools")
 	ti.CharLimit = 80
 	ti.Width = 40
 

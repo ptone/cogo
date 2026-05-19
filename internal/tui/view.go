@@ -269,19 +269,25 @@ func (m *Model) renderHeader() string {
 	// reason: it would invisibly add 2 cols on top of our budget.
 	left := headerBrand()
 	// Build the right side incrementally, appending each segment only
-	// if it still fits. Model name is the floor — always shown.
+	// if it still fits. Mode badge is the floor (security-critical: a
+	// user must always see whether they're in yolo); the model name is
+	// truncated to make room for it when the terminal is too narrow.
 	const gutter = 1
 	budget := m.width - 2*gutter - lipgloss.Width(left) - 1 // -1 for min gap
-	right := m.styles.HeaderAccent.Render(m.cfg.Model.Name)
+	badge := " · " + modeBadge(mode, m.styles)
+	// Reserve room for the badge before we lay down the model name, so
+	// the badge is guaranteed to fit even at very-narrow widths.
+	modelBudget := budget - lipgloss.Width(badge)
+	modelDisplay := m.cfg.Model.Name
+	if modelBudget < lipgloss.Width(modelDisplay) && modelBudget > 1 {
+		modelDisplay = ansi.Truncate(modelDisplay, modelBudget, "…")
+	}
+	right := m.styles.HeaderAccent.Render(modelDisplay) + badge
 	tryAppend := func(s string) {
 		if lipgloss.Width(right)+lipgloss.Width(s) <= budget {
 			right += s
 		}
 	}
-	// Order matters: append the security-critical mode badge before the
-	// nice-to-haves so a yolo/ask label is the last thing dropped on
-	// narrow terminals.
-	tryAppend(" · " + modeBadge(mode, m.styles))
 	tryAppend(" · " + cwd)
 	tryAppend(" · " + provider)
 	if m.usage != nil {
