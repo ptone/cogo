@@ -59,6 +59,15 @@ type Gate struct {
 	// pre-check runs before the gate ever sees the request.
 	sessionAllowTools map[string]struct{}
 
+	// Verb-scoped in-session allow set, keyed by "<tool>|<verb>".
+	// Populated by DecisionAllowSessionVerb so the user can broaden
+	// approval one step beyond "this exact command" (e.g. "any `git *`
+	// command this session") without trusting all of bash. Today only
+	// CheckBash extracts a verb, but the storage is tool-keyed so
+	// future tools (e.g. namespaced MCP server with sub-commands) can
+	// reuse the same mechanism.
+	sessionAllowVerbs map[string]struct{}
+
 	// Chronological log of every non-deny interactive approval. Surfaces
 	// via Approvals() so /permissions can recommend allowlist entries
 	// based on what the user actually approved this session.
@@ -93,14 +102,36 @@ func New(opts Options) *Gate {
 		prompter:          opts.Prompter,
 		sessionAllow:      make(map[string]struct{}),
 		sessionAllowTools: make(map[string]struct{}),
+		sessionAllowVerbs: make(map[string]struct{}),
 	}
 }
 
 // FromConfig builds a Gate from a Cogo config plus the resolved
 // project root and user-global root. The Prompter is wired separately
 // since it depends on whether we're running TUI or headless.
+//
+// Built-in allow bundles are merged into the user's allowlist first so
+// the conservative read-only baseline (pwd, ls, cat, grep, find, …) is
+// active out of the box. Set permissions.use_builtin_allow=false to
+// opt out entirely; extend via permissions.builtin_allow_extras to
+// enable the dev_tools or cogo_tools bundles.
 func FromConfig(cfg *config.Config, projectRoot, userRoot string, prompter Prompter) (*Gate, error) {
-	policy, err := NewPolicy(cfg.Permissions.Allow, cfg.Permissions.Deny)
+	useBuiltin := true
+	if cfg.Permissions.UseBuiltinAllow != nil {
+		useBuiltin = *cfg.Permissions.UseBuiltinAllow
+	}
+	builtin, err := ResolveBuiltinAllow(useBuiltin, cfg.Permissions.BuiltinAllowExtras)
+	if err != nil {
+		return nil, err
+	}
+	// Pre-size the merged allowlist so the assignment is to a fresh
+	// backing array — gocritic flags `allow := append(builtin, …)`
+	// because callers could reasonably expect builtin to be unchanged
+	// afterwards. Allocating up front avoids the aliasing question.
+	allow := make([]string, 0, len(builtin)+len(cfg.Permissions.Allow))
+	allow = append(allow, builtin...)
+	allow = append(allow, cfg.Permissions.Allow...)
+	policy, err := NewPolicy(allow, cfg.Permissions.Deny)
 	if err != nil {
 		return nil, fmt.Errorf("permissions policy: %w", err)
 	}
@@ -202,6 +233,16 @@ func (g *Gate) gateRequest(ctx context.Context, kind PromptKind, toolName, key, 
 	if g.sessionAllowed(toolName, key) {
 		return nil
 	}
+	// Verb-scoped session allow (bash only today). Sits between the
+	// per-key and per-tool checks because "allow this verb" is exactly
+	// one step broader than "allow this command".
+	verb := ""
+	if kind == PromptKindBash {
+		verb = extractBashVerb(key)
+		if verb != "" && g.sessionVerbAllowed(toolName, verb) {
+			return nil
+		}
+	}
 	switch g.mode {
 	case ModeYolo:
 		return nil
@@ -216,6 +257,7 @@ func (g *Gate) gateRequest(ctx context.Context, kind PromptKind, toolName, key, 
 			Detail:      key,
 			PersistTool: persistTool,
 			PersistKey:  persistKey,
+			Verb:        verb,
 		})
 	}
 	return fmt.Errorf("%s denied: unknown permission mode %q", toolName, g.mode)
@@ -258,6 +300,24 @@ func (g *Gate) prompt(ctx context.Context, req PromptRequest) error {
 	case DecisionAllowSession:
 		g.rememberSession(req.ToolName, req.Detail)
 		g.recordApproval(req.ToolName, req.Detail, d)
+		return nil
+	case DecisionAllowSessionVerb:
+		// Verb-scoped trust covers every subsequent command with the
+		// same leading verb (e.g. all `git *`). The detail key recorded
+		// in the approval log is `<verb> *` so /permissions can
+		// recommend the matching persistent allowlist pattern.
+		if req.Verb != "" {
+			g.rememberSessionVerb(req.ToolName, req.Verb)
+		}
+		// Also remember the exact request so a retry of this same call
+		// (or an empty-Verb fallback) doesn't re-prompt before the
+		// verb-wide entry is consulted.
+		g.rememberSession(req.ToolName, req.Detail)
+		key := req.Detail
+		if req.Verb != "" {
+			key = req.Verb + " *"
+		}
+		g.recordApproval(req.ToolName, key, d)
 		return nil
 	case DecisionAllowSessionTool:
 		// "Trust the whole tool for this session." We remember the
@@ -309,6 +369,22 @@ func (g *Gate) rememberSessionTool(toolName string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.sessionAllowTools[toolName] = struct{}{}
+}
+
+// sessionVerbAllowed reports whether the user has trusted toolName for
+// every command beginning with verb (this session) via
+// DecisionAllowSessionVerb.
+func (g *Gate) sessionVerbAllowed(toolName, verb string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	_, ok := g.sessionAllowVerbs[toolName+"|"+verb]
+	return ok
+}
+
+func (g *Gate) rememberSessionVerb(toolName, verb string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.sessionAllowVerbs[toolName+"|"+verb] = struct{}{}
 }
 
 // recordApproval appends an interactive approval to the session's

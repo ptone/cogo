@@ -223,8 +223,10 @@ func renderChoiceCycler(f elicitField, active bool, st Styles) string {
 }
 
 // renderConfirmModal draws the permission request modal in place of
-// the input area. Kept simple in Slice 3: a bordered box with the
-// request detail and the four-key prompt.
+// the input area. The verb middle option ([v] this verb · session) is
+// inserted between "this call" and "this tool" when the gate populated
+// req.Verb — that's the only signal that broadening to `<verb> *` is
+// safe to offer.
 func (m *Model) renderConfirmModal() string {
 	req := m.pendingConfirm.Req
 	kindLabel := map[int]string{
@@ -236,8 +238,13 @@ func (m *Model) renderConfirmModal() string {
 	if kindLabel == "" {
 		kindLabel = "Tool"
 	}
+	footer := "[y] once  [s] this call · session  "
+	if req.Verb != "" {
+		footer += "[v] `" + req.Verb + " *` · session  "
+	}
+	footer += "[t] this tool · session  [a] always (persist)  [n/esc] deny"
 	body := m.styles.Confirm.Render(kindLabel+": "+req.Detail) + "\n" +
-		m.styles.Footer.Render("[y] once  [s] this call · session  [t] this tool · session  [a] always (persist)  [n/esc] deny")
+		m.styles.Footer.Render(footer)
 	return m.styles.InputBorder.Render(body)
 }
 

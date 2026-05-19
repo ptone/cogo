@@ -75,6 +75,20 @@ type PermissionsConfig struct {
 	Mode  string   `json:"mode,omitempty"`  // "ask" | "allow" | "yolo"
 	Allow []string `json:"allow,omitempty"` // pattern allowlist
 	Deny  []string `json:"deny,omitempty"`  // pattern denylist
+
+	// UseBuiltinAllow toggles cogo's built-in conservative read-only
+	// allowlist (pwd, ls, cat, head, tail, grep, find, …). nil means
+	// "use the default", which is on; explicit false disables every
+	// built-in bundle including any opt-ins in BuiltinAllowExtras.
+	// Pointer-bool so a missing field defaults to true while explicit
+	// false stays false through JSON merge.
+	UseBuiltinAllow *bool `json:"use_builtin_allow,omitempty"`
+
+	// BuiltinAllowExtras names additional built-in bundles to merge on
+	// top of the conservative read-only baseline. Recognized values are
+	// listed by permissions.KnownBundles() (currently "dev_tools" and
+	// "cogo_tools"). Unknown names error at Validate() time.
+	BuiltinAllowExtras []string `json:"builtin_allow_extras,omitempty"`
 }
 
 // AgentConfig tunes runtime agent behavior.
@@ -198,5 +212,9 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("config: unknown permissions.mode %q", c.Permissions.Mode)
 	}
+	// Bundle-name validation lives in the permissions package
+	// (permissions.ResolveBuiltinAllow returns an error for unknown
+	// names) because the bundle catalog lives there. Keeping the check
+	// at gate-construction time avoids a circular import here.
 	return nil
 }

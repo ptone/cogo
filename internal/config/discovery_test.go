@@ -172,6 +172,78 @@ func TestLoad_MergesPartialOverrides(t *testing.T) {
 	}
 }
 
+// TestLoad_BuiltinAllowFields pins the JSON parsing of the new
+// built-in allow knobs. The pointer-bool is load-bearing: an absent
+// field must leave UseBuiltinAllow == nil (interpreted as on at gate
+// construction) while explicit `false` must round-trip as a non-nil
+// pointer to false. If you collapse it back to a plain bool, "use
+// defaults unless I opt out" silently becomes "off unless I opt in"
+// for every user with a partial cogo.json.
+func TestLoad_BuiltinAllowFields(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name       string
+		body       string
+		wantPtr    *bool
+		wantExtras []string
+	}{
+		{
+			name:       "absent leaves pointer nil",
+			body:       `{"version":1,"model":{"name":"x"}}`,
+			wantPtr:    nil,
+			wantExtras: nil,
+		},
+		{
+			name:       "explicit false stays false",
+			body:       `{"version":1,"model":{"name":"x"},"permissions":{"use_builtin_allow":false}}`,
+			wantPtr:    boolPtr(false),
+			wantExtras: nil,
+		},
+		{
+			name:       "extras parsed",
+			body:       `{"version":1,"model":{"name":"x"},"permissions":{"builtin_allow_extras":["dev_tools","cogo_tools"]}}`,
+			wantPtr:    nil,
+			wantExtras: []string{"dev_tools", "cogo_tools"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			agents := filepath.Join(root, AgentsDirName)
+			if err := os.MkdirAll(agents, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(agents, ConfigFileName), []byte(tc.body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(agents)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			gotPtr := cfg.Permissions.UseBuiltinAllow
+			switch {
+			case tc.wantPtr == nil && gotPtr != nil:
+				t.Errorf("UseBuiltinAllow = %v, want nil", *gotPtr)
+			case tc.wantPtr != nil && gotPtr == nil:
+				t.Errorf("UseBuiltinAllow = nil, want %v", *tc.wantPtr)
+			case tc.wantPtr != nil && *gotPtr != *tc.wantPtr:
+				t.Errorf("UseBuiltinAllow = %v, want %v", *gotPtr, *tc.wantPtr)
+			}
+			if len(cfg.Permissions.BuiltinAllowExtras) != len(tc.wantExtras) {
+				t.Fatalf("BuiltinAllowExtras = %v, want %v", cfg.Permissions.BuiltinAllowExtras, tc.wantExtras)
+			}
+			for i, want := range tc.wantExtras {
+				if cfg.Permissions.BuiltinAllowExtras[i] != want {
+					t.Errorf("BuiltinAllowExtras[%d] = %q, want %q", i, cfg.Permissions.BuiltinAllowExtras[i], want)
+				}
+			}
+		})
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
+
 func TestLoad_RejectsBadProvider(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

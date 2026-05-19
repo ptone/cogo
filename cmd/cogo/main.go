@@ -220,5 +220,15 @@ Authentication:
   GOOGLE_GENAI_USE_VERTEXAI=true with GOOGLE_CLOUD_PROJECT (and Application
   Default Credentials) for Vertex AI.
 
+Permissions:
+  Out of the box, common read-only commands (pwd, ls, cat, grep, find, …)
+  are auto-approved via a built-in conservative allowlist. Add the
+  "dev_tools" bundle for read-only git/go/gofmt or "cogo_tools" for cogo's
+  own file tools via permissions.builtin_allow_extras in .agents/cogo.json.
+  Disable everything with permissions.use_builtin_allow=false. The grammar
+  for permissions.allow is "<tool>:<glob>" — e.g. "bash:git *" allows any
+  git command, "bash:*" allows all bash, "read_file:internal/**" scopes a
+  read tool to a subtree.
+
 See docs/REQUIREMENTS.md, docs/DESIGN.md, and docs/SLICES.md for the spec.`)
 }

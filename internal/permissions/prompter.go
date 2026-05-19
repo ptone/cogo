@@ -15,6 +15,7 @@ const (
 	DecisionDeny             Decision = iota // reject this call
 	DecisionAllowOnce                        // allow this call, ask again next time
 	DecisionAllowSession                     // allow this exact request for the rest of the session
+	DecisionAllowSessionVerb                 // allow every bash command starting with this verb for the session (e.g. all `git *`)
 	DecisionAllowSessionTool                 // allow EVERY call to this tool for the rest of the session, regardless of args
 	DecisionAllowAlways                      // persist a permanent allowlist entry, then allow
 )
@@ -28,6 +29,8 @@ func (d Decision) String() string {
 		return "allow-once"
 	case DecisionAllowSession:
 		return "allow-session"
+	case DecisionAllowSessionVerb:
+		return "allow-session-verb"
 	case DecisionAllowSessionTool:
 		return "allow-session-tool"
 	case DecisionAllowAlways:
@@ -58,6 +61,13 @@ type PromptRequest struct {
 	Detail      string // user-facing description (the bash command, the file path, etc.)
 	PersistTool string // tool name to use when adding to allowlist (e.g. "bash")
 	PersistKey  string // pattern to add to allowlist
+
+	// Verb is the leading command verb extracted from Detail when Kind
+	// is PromptKindBash and the verb is a plain identifier (no slash,
+	// no quote, env assignments stripped). Empty otherwise. Hosts use
+	// this to render the "Allow `<verb> *` · session" middle option;
+	// when it's empty, that option must not be shown.
+	Verb string
 }
 
 // Prompter is implemented by hosts that can interact with the user

@@ -19,10 +19,12 @@ type KeyMap struct {
 	LineDown   key.Binding // Down arrow — moves forward through recall
 
 	// Permission modal: y allow once, n deny, s allow for the session,
-	// a allow always (persisted).
+	// v allow this verb (e.g. `git *`) for the session, t allow this
+	// tool for the session, a allow always (persisted).
 	ConfirmAllowOnce        key.Binding
 	ConfirmDeny             key.Binding
 	ConfirmAllowSession     key.Binding
+	ConfirmAllowSessionVerb key.Binding
 	ConfirmAllowSessionTool key.Binding
 	ConfirmAllowAlways      key.Binding
 }
@@ -77,6 +79,10 @@ func DefaultKeyMap() KeyMap {
 		ConfirmAllowSession: key.NewBinding(
 			key.WithKeys("s"),
 			key.WithHelp("s", "allow this call for the session"),
+		),
+		ConfirmAllowSessionVerb: key.NewBinding(
+			key.WithKeys("v"),
+			key.WithHelp("v", "allow this verb (e.g. `git *`) for the session"),
 		),
 		ConfirmAllowSessionTool: key.NewBinding(
 			key.WithKeys("t"),

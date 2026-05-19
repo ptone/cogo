@@ -175,6 +175,15 @@ func (m *Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		d = permissions.DecisionAllowOnce
 	case key.Matches(msg, m.keys.ConfirmAllowSession):
 		d = permissions.DecisionAllowSession
+	case key.Matches(msg, m.keys.ConfirmAllowSessionVerb):
+		// Only honor "v" when the gate populated a verb; otherwise the
+		// modal didn't show this option and the keystroke is a no-op
+		// (prevents an accidental tap from broadening permissions to
+		// nothing useful).
+		if m.pendingConfirm.Req.Verb == "" {
+			return m, nil
+		}
+		d = permissions.DecisionAllowSessionVerb
 	case key.Matches(msg, m.keys.ConfirmAllowSessionTool):
 		d = permissions.DecisionAllowSessionTool
 	case key.Matches(msg, m.keys.ConfirmAllowAlways):
