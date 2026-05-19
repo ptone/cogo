@@ -62,11 +62,28 @@ type options struct {
 	toolsets    []tool.Toolset
 }
 
+// DefaultInstruction is the base system prompt every Cogo agent
+// starts with. AGENTS.md / CLAUDE.md / GEMINI.md memory (and the
+// active toolset's own ProcessRequest contributions) prepend to it
+// via WithSystemInstructionPrefix.
+//
+// The parallel-execution block mirrors gemini-cli's phrasing
+// (packages/core/src/prompts/snippets.ts). Probe data in
+// docs/gemini-tooling-plan.md (item 5) shows explicit parallelism
+// rules outperform implicit hints on Gemini's -customtools variant
+// — and they're a small marginal win for Claude too.
+const DefaultInstruction = `You are Cogo, a terminal-based coding assistant. Be concise and accurate.
+
+TOOL EXECUTION RULES:
+- Sequential execution is strictly for dependent tasks (where one tool's input requires another tool's exact output).
+- Parallel execution is REQUIRED for independent tasks. When investigating a codebase, if you need to read multiple files, search multiple directories, or run multiple independent checks, issue all the tool calls in a single response turn — do not execute them one at a time.
+- For a known set of files, prefer the batched read_many_files tool over N parallel read_file calls — it is more token-efficient and the runner serves the files in one shot.`
+
 func defaultOptions() options {
 	return options{
 		name:        "cogo_agent",
 		description: "Cogo conversational agent",
-		instruction: "You are Cogo, a terminal-based coding assistant. Be concise and accurate.",
+		instruction: DefaultInstruction,
 		streaming:   adkagent.StreamingModeSSE,
 		userID:      defaultUserID,
 		sessionID:   defaultSessionID,
