@@ -10,6 +10,7 @@ package headless
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -84,10 +85,16 @@ func Run(ctx context.Context, m adkmodel.LLM, prompt string, stdout, stderr io.W
 		// Tool-call summaries → stderr (one line per call/result).
 		// Partial assistant text → stdout (streamed incrementally).
 		// Final TurnComplete event repeats the full text; skipped.
+		//
+		// The arrow line now carries a truncated JSON arg summary so
+		// trace files self-diagnose ("→ bash {\"command\":\"go build
+		// ./...\"}") rather than just naming the tool. Filed in #75
+		// after UAT-2.1 produced a 23-bash trace that we couldn't
+		// classify without the actual command strings.
 		for _, p := range event.Content.Parts {
 			switch {
 			case p.FunctionCall != nil:
-				fmt.Fprintf(stderr, "→ %s\n", p.FunctionCall.Name)
+				fmt.Fprintf(stderr, "→ %s%s\n", p.FunctionCall.Name, formatTraceArgs(p.FunctionCall.Args))
 			case p.FunctionResponse != nil:
 				fmt.Fprintf(stderr, "← %s\n", p.FunctionResponse.Name)
 			case p.Text != "" && event.Partial:
@@ -225,4 +232,34 @@ func writeExitSummary(w io.Writer, t *usage.Tracker, modelID string) {
 	}
 	fmt.Fprintf(w, "cogo: %d turn(s) · ↑%d ↓%d tokens · $%.4f (%s)\n",
 		tot.Turns, tot.InputTokens, tot.OutputTokens, tot.CostUSD, modelID)
+}
+
+// traceArgsMaxBytes caps the per-call arg summary in the headless
+// trace. The cap is generous enough to fit a full `go test ./...`
+// invocation but short enough that a 500-line trace stays readable.
+const traceArgsMaxBytes = 120
+
+// formatTraceArgs renders a compact JSON summary of a tool call's
+// arguments suitable for the `→ <tool>` trace line. Returns "" (so
+// the trace line collapses cleanly to "→ <tool>") when args is empty
+// or fails to marshal. Truncation uses a single trailing "…" so the
+// caller can distinguish "summary fit" from "summary was clipped"
+// without parsing.
+//
+// Output is meant for at-a-glance debugging only; downstream tools
+// that need the exact args should parse the structured ADK events,
+// not this string.
+func formatTraceArgs(args map[string]any) string {
+	if len(args) == 0 {
+		return ""
+	}
+	body, err := json.Marshal(args)
+	if err != nil {
+		return ""
+	}
+	s := string(body)
+	if len(s) > traceArgsMaxBytes {
+		s = s[:traceArgsMaxBytes] + "…"
+	}
+	return " " + s
 }

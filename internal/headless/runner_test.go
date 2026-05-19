@@ -13,6 +13,56 @@ import (
 	"github.com/go-steer/cogo/internal/usage"
 )
 
+// TestFormatTraceArgs pins the wire format of the `→ <tool>` trace
+// line's optional arg summary. Existed in response to issue #75
+// where UAT-2.1 surfaced 23 bash calls in a trace, and the tool
+// names alone weren't enough to tell which were verification work
+// (`go build`) vs. structured-tool replacements (`bash grep ...`).
+// If you change the format, update consumers — including dev/uat/
+// harness scripts that grep for the leading `→` token. DO NOT delete
+// this test to silence a compile failure; fix the formatter
+// instead.
+func TestFormatTraceArgs(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		args map[string]any
+		want string
+	}{
+		{"empty args collapse cleanly", nil, ""},
+		{"empty map also collapses", map[string]any{}, ""},
+		{"single string field", map[string]any{"command": "go build ./..."}, ` {"command":"go build ./..."}`},
+		{
+			"long string gets truncated with single ellipsis",
+			map[string]any{"command": strings.Repeat("x", 200)},
+			// JSON adds {"command":"…"} wrapper = 13 chars; the cap is
+			// 120 so the inner string truncates and the ellipsis lands
+			// at the end.
+			"", // placeholder; assertion below checks length + suffix
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := formatTraceArgs(tc.args)
+			if tc.name == "long string gets truncated with single ellipsis" {
+				if !strings.HasSuffix(got, "…") {
+					t.Errorf("expected trailing ellipsis on truncation; got %q", got)
+				}
+				// Leading space + truncated payload + ellipsis. The
+				// payload should be no longer than traceArgsMaxBytes.
+				if got != "" && len(got)-len(" ")-len("…") > traceArgsMaxBytes {
+					t.Errorf("truncated payload is longer than cap (%d): %q", traceArgsMaxBytes, got)
+				}
+				return
+			}
+			if got != tc.want {
+				t.Errorf("formatTraceArgs = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRun_StreamsPartialsToStdout(t *testing.T) {
 	t.Parallel()
 	model := &testutil.FakeModel{
