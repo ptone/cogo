@@ -49,7 +49,8 @@ func Build(cfg *config.Config, gate *permissions.Gate) (*Registry, error) {
 	}{
 		{"read_file", "Read a file from disk and return its contents.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
-				Name: "read_file", Description: "Read a file from disk. Honors offset/limit for large files.",
+				Name:        "read_file",
+				Description: "Read a file from disk. Honors offset/limit for large files. PREFERRED over `bash cat`: enforces the permission gate and applies output truncation automatically.",
 			}, readFileFunc(gate, cfg))
 		}},
 		{"write_file", "Write or overwrite a file with the given content.", func() (tool.Tool, error) {
@@ -64,30 +65,32 @@ func Build(cfg *config.Config, gate *permissions.Gate) (*Registry, error) {
 		}},
 		{"list_dir", "List entries of a directory.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
-				Name: "list_dir", Description: "List the entries (files and subdirectories) of a directory.",
+				Name:        "list_dir",
+				Description: "List the entries (files and subdirectories) of a directory. PREFERRED over `bash ls`: gate-enforced and output-capped.",
 			}, listDirFunc(gate, cfg))
 		}},
 		{"glob", "Find files by basename pattern.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
 				Name:        "glob",
-				Description: "Walk a directory and return paths whose basename matches a shell-style pattern (e.g. *.go, README.*). Honors the permission gate and the configured output caps; skips .git/.svn/.hg/node_modules/vendor.",
+				Description: "Walk a directory and return paths whose basename matches a shell-style pattern (e.g. *.go, README.*). PREFERRED over `bash find` for filename discovery: gate-enforced, output-capped, skips .git/.svn/.hg/node_modules/vendor.",
 			}, globFunc(gate, cfg))
 		}},
 		{"grep", "Search file contents with a regex.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
 				Name:        "grep",
-				Description: "Walk a directory and return every line matching an RE2 regular expression. Single-file mode when the path is a regular file. Honors the permission gate and the configured output caps; skips .git/.svn/.hg/node_modules/vendor.",
+				Description: "Walk a directory and return every line matching an RE2 regular expression. Single-file mode when the path is a regular file. PREFERRED over `bash grep` (or rg / ag): gate-enforced, automatic output truncation, skips .git/.svn/.hg/node_modules/vendor.",
 			}, grepFunc(gate, cfg))
 		}},
 		{"read_many_files", "Read multiple files in one call.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
 				Name:        "read_many_files",
-				Description: "Read several files in a single tool call. Takes an explicit `paths` list and/or a `pattern` glob (walked from `root`, default cwd). Returns {path, content} per file with per-file truncation and a batch-level cap. Prefer over multiple read_file calls when gathering context from a known set of files.",
+				Description: "Read several files in a single tool call. Takes an explicit `paths` list and/or a `pattern` glob (walked from `root`, default cwd). Returns {path, content} per file with per-file truncation and a batch-level cap. PREFERRED over multiple read_file calls when you need to read N files at once — one batched call is more token-efficient and lets the runner serve them in parallel.",
 			}, readManyFilesFunc(gate, cfg))
 		}},
 		{"bash", "Run a shell command and return its output.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
-				Name: "bash", Description: "Execute a shell command via /bin/sh -c with a timeout.",
+				Name:        "bash",
+				Description: "Execute a shell command via /bin/sh -c with a timeout. For code investigation (reads, searches, listings, file discovery) prefer the structured tools: read_file, read_many_files, grep, glob, list_dir — they honor the permission gate consistently and truncate output predictably. Use bash for actions the structured tools cannot perform (running builds/tests, invoking the package manager, kicking off git operations, etc.).",
 			}, bashFunc(gate, cfg))
 		}},
 		{"todo", "Maintain an agent-facing todo list (list/add/set_status/clear).", func() (tool.Tool, error) {
