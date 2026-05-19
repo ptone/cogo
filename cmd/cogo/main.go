@@ -51,14 +51,18 @@ func run(args []string, stdout, stderr *os.File) int {
 	fs.SetOutput(stderr)
 
 	var (
-		prompt      string
-		debug       bool
-		help        bool
-		showVersion bool
+		prompt          string
+		debug           bool
+		help            bool
+		showVersion     bool
+		yolo            bool
+		permissionsMode string
 	)
 	fs.StringVar(&prompt, "p", "", "Shorthand for -prompt.")
 	fs.StringVar(&prompt, "prompt", "", "Run a single prompt non-interactively and stream the reply to stdout, then exit.")
 	fs.BoolVar(&debug, "debug", false, "Enable verbose logging to stderr.")
+	fs.BoolVar(&yolo, "yolo", false, "Bypass all permission prompts and allowlists (built-in tools, MCP, and skills). Shorthand for -permissions=yolo. The bash destructive-command denylist still applies.")
+	fs.StringVar(&permissionsMode, "permissions", "", "Override permissions.mode for this invocation: ask | allow | yolo.")
 	fs.BoolVar(&help, "h", false, "Show help and exit.")
 	fs.BoolVar(&help, "help", false, "Show help and exit.")
 	fs.BoolVar(&showVersion, "version", false, "Show version and exit.")
@@ -93,6 +97,10 @@ func run(args []string, stdout, stderr *os.File) int {
 		fmt.Fprintf(stderr, "cogo: %v\n", err)
 		return headless.ExitConfigError
 	}
+	if err := applyPermissionsOverride(cfg, yolo, permissionsMode); err != nil {
+		fmt.Fprintf(stderr, "cogo: %v\n", err)
+		return headless.ExitConfigError
+	}
 	if agentsDir != "" {
 		slog.Debug("loaded project config", "agentsDir", agentsDir)
 	} else {
@@ -121,6 +129,30 @@ func run(args []string, stdout, stderr *os.File) int {
 		fmt.Fprintf(stderr, "cogo: %v\n", err)
 	}
 	return code
+}
+
+// applyPermissionsOverride lets CLI flags override the loaded config's
+// permission mode for this invocation only — the on-disk cogo.json is
+// untouched. -yolo is a convenience alias for -permissions=yolo;
+// passing both is fine when they agree, and an error when they don't.
+func applyPermissionsOverride(cfg *config.Config, yolo bool, mode string) error {
+	if mode != "" {
+		switch mode {
+		case config.PermissionModeAsk, config.PermissionModeAllow, config.PermissionModeYolo:
+			// ok
+		default:
+			return fmt.Errorf("invalid -permissions %q (want ask, allow, or yolo)", mode)
+		}
+		if yolo && mode != config.PermissionModeYolo {
+			return fmt.Errorf("conflicting flags: -yolo with -permissions=%q", mode)
+		}
+		cfg.Permissions.Mode = mode
+		return nil
+	}
+	if yolo {
+		cfg.Permissions.Mode = config.PermissionModeYolo
+	}
+	return nil
 }
 
 func setupLogging(debug bool, w *os.File) {
@@ -173,6 +205,12 @@ Usage:
 Flags:
   -p, -prompt <text>   Run a single prompt non-interactively and stream the
                        assistant reply to stdout, then exit.
+  -yolo                Bypass all permission prompts and allowlists (built-in
+                       tools, MCP servers, and skills). The bash destructive-
+                       command denylist still applies. Works in both headless
+                       and interactive modes.
+  -permissions <mode>  Override permissions.mode for this run: ask | allow |
+                       yolo. Cogo.json is not modified.
   -debug               Enable verbose logging to stderr.
   -v, -version         Print version and exit.
   -h, -help            Show this help.
