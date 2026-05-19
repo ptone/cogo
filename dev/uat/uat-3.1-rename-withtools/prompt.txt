@@ -1,0 +1,1 @@
+In internal/agent/agent.go, rename the WithTools function to WithToolList. Update every call site across the codebase so the build still works.

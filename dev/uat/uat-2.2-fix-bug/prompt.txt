@@ -1,0 +1,3 @@
+tools.Build is panicking on every call — nil-pointer dereference somewhere in the construction path. Find and fix the bug. Don't change anything beyond what's necessary to fix it.
+
+Verify the fix with: go test ./internal/tools/...

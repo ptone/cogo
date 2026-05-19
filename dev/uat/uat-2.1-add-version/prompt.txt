@@ -1,0 +1,20 @@
+Add a new slash command /version to the cogo TUI that prints the cogo version and build info.
+
+Wire it up the same way /quit is wired:
+- Add the action constant in internal/tui/commands.go (SlashVersion).
+- Add an alias map entry so "version" routes to SlashVersion.
+- Add a palette entry in internal/tui/palette.go.
+- Add a case in the handleSlash switch in internal/tui/update.go that
+  appends a system message with the version string.
+
+The version string lives in cmd/cogo/version.go — there's a versionString()
+function. Since cmd/cogo is package main, the TUI can't import it directly.
+You'll need to either move versionString() to an importable package or
+duplicate the relevant logic.
+
+Constraints:
+- All existing tests must still pass (go test ./internal/tui/...).
+- The build must succeed (go build ./...).
+- Don't change anything that isn't directly necessary for /version.
+
+When done, summarize what you changed, file by file.

@@ -1,0 +1,11 @@
+Add a new field `Description string` to the permissions.PromptRequest struct (internal/permissions/prompter.go).
+
+Surface it in the TUI's permission modal — renderConfirmModal in internal/tui/view.go — as a second line displayed below the existing detail line, prefixed with "Why: ".
+
+Then update every PromptRequest constructor across the codebase so they populate Description with a one-line explanation appropriate to the call site. Search for `PromptRequest{` to find them; there are several, including in tests.
+
+Verify with:
+- go build ./...
+- go test ./internal/...
+
+The new field must appear on every constructor, not just the production paths.

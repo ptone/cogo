@@ -1,0 +1,1 @@
+Why does cogo use Redis to cache file reads? Walk me through where the Redis client is configured.
