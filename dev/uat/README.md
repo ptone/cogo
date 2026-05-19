@@ -38,11 +38,29 @@ UAT_REPO_URL="file://$(pwd)" UAT_REF=feat/my-branch dev/uat/runner.sh
 
 # Per-UAT timeout (default 300 s)
 UAT_TIMEOUT=600 dev/uat/runner.sh uat-3.3
+
+# Exercise the permission gate instead of bypassing it (rare;
+# UATs aren't gate tests)
+UAT_NO_YOLO=1 dev/uat/runner.sh uat-2.1
 ```
 
 Each UAT runs inside a throwaway clone in a temp dir; your working
 tree is never modified. Captured stdout / stderr / tool trace land at
 `/tmp/<uat-id>.{stdout,stderr,trace}` for post-mortem.
+
+## Why `--yolo` is the default
+
+The harness invokes cogo with `--yolo` by default. Without it, the
+throwaway clone has no `.agents/cogo.json`, so the gate runs in
+`ask` mode + there's no prompter in headless mode, so
+`write_file` / `edit_file` silently deny. The agent then improvises
+with `bash awk '...' > file` / `bash cat <<EOF > file` workarounds
+that leave orphan files breaking the build (the original failure
+mode in #75). UATs are testing the agent's CODE behavior, not the
+gate — `internal/permissions/*_test.go` exists for the gate.
+
+If you explicitly need to exercise the gate (e.g. a UAT that
+asserts on permission-denied behavior), set `UAT_NO_YOLO=1`.
 
 ## What's here
 

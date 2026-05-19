@@ -101,7 +101,17 @@ uat_cleanup() {
 #   $1 — path to a prompt file (or use "-" for stdin)
 #   $2 — output prefix (e.g. "/tmp/uat-2.1"); .stdout/.stderr/.trace
 #        files are written next to it.
-# Honors UAT_TIMEOUT (seconds, default 300).
+# Honors UAT_TIMEOUT (seconds, default 300) and UAT_NO_YOLO (when set,
+# the --yolo flag is omitted — only used by UATs that explicitly need
+# to exercise the permission gate).
+#
+# Why --yolo by default: in headless mode without --yolo, cogo's gate
+# runs in 'ask' mode + there's no prompter, so write_file / edit_file
+# silently deny. The agent then improvises with `bash awk '...' > file`
+# / `bash cat <<EOF > file` workarounds, contaminating the trace with
+# permission-debugging noise (observed in #79). UATs are testing the
+# agent's CODE behavior, not the gate — the gate has its own tests in
+# internal/permissions/*_test.go.
 uat_run_cogo() {
   local prompt="$1"
   local prefix="$2"
@@ -114,7 +124,11 @@ uat_run_cogo() {
   else
     prompt_text="$(cat "$prompt")"
   fi
-  timeout --preserve-status "$timeout" "$bin" -p "$prompt_text" --debug \
+  local args=("-p" "$prompt_text" "--debug")
+  if [[ -z "${UAT_NO_YOLO:-}" ]]; then
+    args+=("--yolo")
+  fi
+  timeout --preserve-status "$timeout" "$bin" "${args[@]}" \
     > "${prefix}.stdout" 2> "${prefix}.stderr"
   local rc=$?
   # The --debug trace lands on stderr in cogo's default config; some
