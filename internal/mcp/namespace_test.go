@@ -10,6 +10,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/adk/agent"
+	"google.golang.org/adk/model"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/mcptoolset"
 )
@@ -118,6 +119,83 @@ func TestRenamedTool_DeclarationFromInner(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestRenamedTool_ImplementsRequestProcessor pins a real headless bug:
+// the ADK's tool-preprocess step type-asserts every tool to
+// toolinternal.RequestProcessor and refuses to run the turn otherwise.
+// If you remove this method from renamedTool, headless runs that load
+// any namespaced MCP toolset fail with
+// `tool "<prefixed>" does not implement RequestProcessor() method`
+// before the model is ever called. DO NOT delete this test to silence
+// a compile failure — restore ProcessRequest on renamedTool instead.
+func TestRenamedTool_ImplementsRequestProcessor(t *testing.T) {
+	t.Parallel()
+	inner := newInMemoryToolset(t)
+	wrapped := withNamespace(inner, "demo")
+	tools, err := wrapped.Tools(asReadonly(context.Background()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) == 0 {
+		t.Fatal("expected at least one tool from in-memory MCP server")
+	}
+	for _, tl := range tools {
+		rp, ok := tl.(interface {
+			ProcessRequest(tool.Context, *model.LLMRequest) error
+		})
+		if !ok {
+			t.Fatalf("renamed tool %q must implement ProcessRequest "+
+				"(ADK preprocess requires this; see test comment)", tl.Name())
+		}
+		req := &model.LLMRequest{}
+		if err := rp.ProcessRequest(nil, req); err != nil {
+			t.Fatalf("ProcessRequest(%q): %v", tl.Name(), err)
+		}
+		// PackTool registers under the wrapper's prefixed name so the
+		// runner's dispatch map points at the renamed wrapper, not the
+		// inner unprefixed tool. If this regresses, MCP calls would be
+		// dispatched under the wrong name and 404.
+		if _, ok := req.Tools[tl.Name()]; !ok {
+			t.Errorf("ProcessRequest must register tool under prefixed name %q", tl.Name())
+		}
+	}
+}
+
+// TestNamespacedToolset_ProcessRequestForwards ensures toolset-level
+// request processors survive the wrapper — important when wrapping any
+// future ADK toolset that injects system instructions (skilltoolset
+// already does this and is gated through a sibling wrapper).
+func TestNamespacedToolset_ProcessRequestForwards(t *testing.T) {
+	t.Parallel()
+	called := false
+	inner := &fakeToolsetWithProcessRequest{onProcess: func() { called = true }}
+	wrapped := withNamespace(inner, "x")
+	rp, ok := wrapped.(interface {
+		ProcessRequest(tool.Context, *model.LLMRequest) error
+	})
+	if !ok {
+		t.Fatal("namespacedToolset must implement ProcessRequest")
+	}
+	if err := rp.ProcessRequest(nil, &model.LLMRequest{}); err != nil {
+		t.Fatalf("ProcessRequest: %v", err)
+	}
+	if !called {
+		t.Error("expected ProcessRequest to forward to inner toolset")
+	}
+}
+
+type fakeToolsetWithProcessRequest struct {
+	onProcess func()
+}
+
+func (f *fakeToolsetWithProcessRequest) Name() string { return "fake" }
+func (f *fakeToolsetWithProcessRequest) Tools(agent.ReadonlyContext) ([]tool.Tool, error) {
+	return nil, nil
+}
+func (f *fakeToolsetWithProcessRequest) ProcessRequest(tool.Context, *model.LLMRequest) error {
+	f.onProcess()
+	return nil
 }
 
 func TestSimpleErr(t *testing.T) {

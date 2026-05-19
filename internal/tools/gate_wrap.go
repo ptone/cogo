@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"google.golang.org/adk/agent"
+	adkmodel "google.golang.org/adk/model"
 	adktool "google.golang.org/adk/tool"
 	"google.golang.org/genai"
 
@@ -60,6 +61,24 @@ func (g *gatedToolset) Tools(ctx agent.ReadonlyContext) ([]adktool.Tool, error) 
 	return out, nil
 }
 
+// ProcessRequest forwards to the inner toolset's request processor when
+// it has one (e.g. skilltoolset injects an XML list of available skills
+// plus the "use load_skill to read full instructions" system prompt).
+// Toolsets without a processor (most MCP toolsets) are a no-op here.
+func (g *gatedToolset) ProcessRequest(ctx adktool.Context, req *adkmodel.LLMRequest) error {
+	if rp, ok := g.inner.(toolsetRequestProcessor); ok {
+		return rp.ProcessRequest(ctx, req)
+	}
+	return nil
+}
+
+// toolsetRequestProcessor mirrors toolinternal.RequestProcessor (the
+// unexported interface the ADK's flow checks via type assertion). We
+// re-declare it so we can delegate without importing internal packages.
+type toolsetRequestProcessor interface {
+	ProcessRequest(ctx adktool.Context, req *adkmodel.LLMRequest) error
+}
+
 type gatedTool struct {
 	inner     adktool.Tool
 	gate      *permissions.Gate
@@ -92,6 +111,53 @@ func (gt *gatedTool) Run(ctx adktool.Context, args any) (map[string]any, error) 
 		return nil, err
 	}
 	return rn.Run(ctx, args)
+}
+
+// ProcessRequest packs this gated wrapper (not the inner tool) into the
+// LLM request so the runner's dispatch map points at us — that keeps
+// every invocation flowing through Run, and therefore through the gate.
+// Required because the ADK's tool-preprocess step type-asserts every
+// tool to RequestProcessor and refuses to proceed when one is missing.
+func (gt *gatedTool) ProcessRequest(_ adktool.Context, req *adkmodel.LLMRequest) error {
+	return PackTool(req, gt)
+}
+
+// PackTool mirrors google.golang.org/adk/internal/toolinternal/toolutils.PackTool,
+// which is internal to ADK. The shape is small and the contract is
+// stable: register the tool by name, then append its declaration to
+// the function-declarations bucket on the GenerateContentConfig.
+//
+// Exported so other tool-wrapper packages (e.g. internal/mcp) can build
+// the same ProcessRequest plumbing without depending on ADK internals.
+func PackTool(req *adkmodel.LLMRequest, t interface {
+	Name() string
+	Declaration() *genai.FunctionDeclaration
+}) error {
+	if req.Tools == nil {
+		req.Tools = make(map[string]any)
+	}
+	name := t.Name()
+	if _, exists := req.Tools[name]; exists {
+		return fmt.Errorf("tools: duplicate tool %q in LLM request", name)
+	}
+	req.Tools[name] = t
+	if req.Config == nil {
+		req.Config = &genai.GenerateContentConfig{}
+	}
+	decl := t.Declaration()
+	if decl == nil {
+		return nil
+	}
+	for _, existing := range req.Config.Tools {
+		if existing != nil && existing.FunctionDeclarations != nil {
+			existing.FunctionDeclarations = append(existing.FunctionDeclarations, decl)
+			return nil
+		}
+	}
+	req.Config.Tools = append(req.Config.Tools, &genai.Tool{
+		FunctionDeclarations: []*genai.FunctionDeclaration{decl},
+	})
+	return nil
 }
 
 // summarizeRequest builds a short human-readable description of the

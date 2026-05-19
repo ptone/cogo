@@ -8,8 +8,11 @@ import (
 	"strings"
 
 	"google.golang.org/adk/agent"
+	"google.golang.org/adk/model"
 	"google.golang.org/adk/tool"
 	"google.golang.org/genai"
+
+	cogotools "github.com/go-steer/cogo/internal/tools"
 )
 
 // runnable is the unexported interface ADK's runner expects from
@@ -61,6 +64,20 @@ func (n *namespacedToolset) Tools(ctx agent.ReadonlyContext) ([]tool.Tool, error
 	return out, nil
 }
 
+// ProcessRequest forwards to the inner toolset's processor when it has
+// one — most MCP toolsets don't, but matching the contract keeps the
+// wrapper transparent for any future ADK toolset that does (the ADK
+// type-asserts toolsets here, so a missing method is benign but a
+// forwarded one is correct).
+func (n *namespacedToolset) ProcessRequest(ctx tool.Context, req *model.LLMRequest) error {
+	if rp, ok := n.inner.(interface {
+		ProcessRequest(tool.Context, *model.LLMRequest) error
+	}); ok {
+		return rp.ProcessRequest(ctx, req)
+	}
+	return nil
+}
+
 // renamedTool exposes the underlying tool with a prefixed Name so the
 // agent sees `<prefix>_<original>` everywhere. Description and
 // long-running flag pass through; Run delegates verbatim.
@@ -105,6 +122,15 @@ func (r renamedTool) Run(ctx tool.Context, args any) (map[string]any, error) {
 		return nil, errNotRunnable
 	}
 	return rn.Run(ctx, args)
+}
+
+// ProcessRequest packs this renamed wrapper (not the inner tool) into
+// the LLM request so the runner advertises and dispatches the prefixed
+// name. Delegating to inner.ProcessRequest would re-register under the
+// original name and break the namespacing. Required because the ADK
+// flow refuses to run any tool that doesn't implement RequestProcessor.
+func (r renamedTool) ProcessRequest(_ tool.Context, req *model.LLMRequest) error {
+	return cogotools.PackTool(req, r)
 }
 
 // sanitizePrefix normalizes a server name into a Gemini-friendly
