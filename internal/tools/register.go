@@ -119,6 +119,12 @@ func Build(cfg *config.Config, gate *permissions.Gate) (*Registry, error) {
 				Description: "AST-based lookup: find where a Go identifier is DEFINED (funcs, methods, types, interfaces, vars, consts). Returns [{path, line, kind, name, receiver, signature}] for every matching definition under `path` (default cwd). PREFERRED over `grep -rn \"type Foo\"` / `grep -rn \"func Bar\"`: handles multi-line declarations, distinguishes definitions from references, knows about method receivers, skips _test.go by default. `match` modes: exact (default), prefix, substring. Skips .git/.svn/.hg/node_modules/vendor.",
 			}, goSymbolFindFunc(gate, cfg))
 		}},
+		{"go_implements", "List concrete types that satisfy a Go interface.", func() (tool.Tool, error) {
+			return functiontool.New(functiontool.Config{
+				Name:        "go_implements",
+				Description: "Type-graph lookup: for an interface name (e.g. \"Reader\" or \"io.Reader\"), returns every concrete type in the loaded packages that satisfies it. Each hit reports {package, type, kind, path, line}; kind is \"concrete\" when the value method set is enough or \"pointer\" when only *T satisfies. IMPOSSIBLE with grep — Go implementations don't declare which interfaces they satisfy. Use when asking 'what implements X?' Costs a few seconds of type-check load on first call against a non-trivial module; tighten via `pattern` (default ./...) to bound the load.",
+			}, goImplementsFunc(gate, cfg))
+		}},
 		{"bash", "Run a shell command and return its output.", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
 				Name: "bash",
