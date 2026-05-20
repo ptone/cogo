@@ -1,0 +1,1 @@
+List every Go source file under internal/tools/ in this repository. Report just the paths, one per line.

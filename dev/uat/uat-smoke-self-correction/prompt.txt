@@ -1,0 +1,1 @@
+This Go project does not build. Run `go build ./...`, identify the compilation error, fix it, and verify the project builds cleanly. Do not skip the verification step — the task is only complete once `go build ./...` exits without errors.

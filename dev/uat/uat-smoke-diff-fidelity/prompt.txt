@@ -1,0 +1,1 @@
+In this Go project, rename the method `Gate.CheckBash` to `Gate.AuthorizeBash` everywhere it appears — the method declaration, every call site, and any references in tests. Do NOT rename `Gate.CheckGeneric` (it stays as-is). After your edits, run `go build ./...` and `go test ./...` to confirm everything still compiles and tests pass.

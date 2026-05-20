@@ -86,6 +86,55 @@ uat_setup_clone() {
   git clone --quiet --depth 1 --branch "$(uat_ref)" "$(uat_repo_url)" "$UAT_WORKDIR" 2>&1 \
     || { echo "uat: failed to clone $(uat_repo_url) at $(uat_ref)" >&2; return 1; }
   cd "$UAT_WORKDIR" || return 1
+  uat_apply_model_override
+}
+
+# uat_setup_fixture copies a self-contained fixture directory into a
+# fresh workdir and cd's there. Used by smoke-coding fixtures that
+# don't need a full github clone — they ship their own minimal Go
+# project as the substrate.
+#
+# Arg: $1 — absolute path to the fixture source dir.
+#
+# Exports UAT_WORKDIR so uat_cleanup removes it on exit (or preserves
+# it when UAT_KEEP_WORKDIR is set). Applies UAT_MODEL the same way
+# uat_setup_clone does.
+uat_setup_fixture() {
+  local fixture_dir="$1"
+  if [[ -z "${fixture_dir:-}" || ! -d "$fixture_dir" ]]; then
+    echo "uat_setup_fixture: fixture dir not found: ${fixture_dir:-<empty>}" >&2
+    return 2
+  fi
+  uat_require_creds || return 2
+  UAT_WORKDIR="$(mktemp -d -t cogo-uat-XXXXXX)"
+  export UAT_WORKDIR
+  cp -a "$fixture_dir"/. "$UAT_WORKDIR"/ \
+    || { echo "uat: failed to copy fixture $fixture_dir → $UAT_WORKDIR" >&2; return 1; }
+  cd "$UAT_WORKDIR" || return 1
+  uat_apply_model_override
+}
+
+# uat_apply_model_override writes .agents/config.json into the cwd
+# pinning model.name to $UAT_MODEL, when that env var is set. Cogo
+# doesn't take a -model CLI flag; per-invocation model selection
+# requires an on-disk config inside the clone. No-op when UAT_MODEL
+# is unset (cogo's built-in default applies).
+#
+# Called from uat_setup_clone after cd-ing into the workdir.
+uat_apply_model_override() {
+  if [[ -z "${UAT_MODEL:-}" ]]; then
+    return 0
+  fi
+  mkdir -p .agents
+  cat > .agents/config.json <<EOF
+{
+  "version": 1,
+  "model": {
+    "name": "${UAT_MODEL}"
+  }
+}
+EOF
+  echo "uat: pinned model = ${UAT_MODEL} (wrote .agents/config.json)" >&2
 }
 
 # uat_cleanup removes the temp dir. Idempotent; safe in a trap.
