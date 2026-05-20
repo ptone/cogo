@@ -42,6 +42,7 @@ var builtinPricing = map[string]Pricing{
 	"gemini-3.1-pro-preview-customtools": {InputPerMTok: 1.25, OutputPerMTok: 5.00},
 	"gemini-3.1-pro-preview":             {InputPerMTok: 1.25, OutputPerMTok: 5.00},
 	"gemini-3.1-pro":                     {InputPerMTok: 1.25, OutputPerMTok: 5.00},
+	"gemini-3.5-flash":                   {InputPerMTok: 0.075, OutputPerMTok: 0.30},
 	"gemini-3-flash-preview":             {InputPerMTok: 0.075, OutputPerMTok: 0.30},
 	"gemini-3-flash":                     {InputPerMTok: 0.075, OutputPerMTok: 0.30},
 	"gemini-3.1-flash-lite-preview":      {InputPerMTok: 0.04, OutputPerMTok: 0.15},

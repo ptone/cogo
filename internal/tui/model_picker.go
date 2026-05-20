@@ -21,6 +21,7 @@ func availableModels() []string {
 		// the bare variant; better behavior for coding-assistant use.
 		"gemini-3.1-pro-preview-customtools",
 		"gemini-3.1-pro-preview",
+		"gemini-3.5-flash",
 		"gemini-3-flash-preview",
 		"gemini-3.1-flash-lite-preview",
 		"gemini-3.1-flash-image-preview",
