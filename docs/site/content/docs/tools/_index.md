@@ -50,6 +50,16 @@ The agent gets a structured response:
 }
 ```
 
+## fetch_url
+
+Fetches a URL via HTTP GET and returns the body, status, content-type, and final-URL.
+
+- **Allowlist enforced**: URLs must match a pattern in `url_scope.allow` in `config.json`. If no allowlist is configured, the tool is disabled and won't be registered.
+- **HTTPS by default**: Requests use HTTPS unless the pattern explicitly starts with `http://`.
+- **Header injection**: The `url_scope.headers` config allows you to inject auth headers (e.g. `Bearer ${env:GITHUB_TOKEN}`) per host pattern so the model doesn't need to see or manage raw tokens.
+- **Binary suppression**: Non-text content types (images, archives, octet streams) are reported as truncated with an empty body so the model sees the metadata without wasting context window on control characters.
+- **Cap**: The body is capped at 64 KiB by default, adjustable via `url_scope.max_body_bytes`.
+
 ## todo
 
 A purely in-session task tracker — no disk I/O, no permission gating. The agent uses it to plan multi-step work and check off progress as it goes.

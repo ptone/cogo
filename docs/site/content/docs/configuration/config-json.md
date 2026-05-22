@@ -99,6 +99,20 @@ When output is truncated, the agent sees a notice (`… [truncated, 5 KiB more]`
 
 See [Observability](../../observability/telemetry/) for full setup.
 
+### `url_scope` *(object)*
+
+Controls the URLs the `fetch_url` tool is allowed to reach.
+
+| Field | Default | Notes |
+|---|---|---|
+| `allow` | `[]` | Hostname globs (e.g. `github.com`, `*.googleapis.com`). Requires `http://` prefix to allow plain HTTP. |
+| `deny` | `[]` | Hostname globs to explicitly block. |
+| `max_body_bytes` | `65536` | Max response body size to return to the model. |
+| `timeout_seconds` | `30` | Request timeout. |
+| `headers` | `{}` | Map of host patterns to headers (e.g. `{"api.github.com": {"Authorization": "Bearer ${env:GITHUB_TOKEN}"}}`). |
+
+If `allow` is empty, the `fetch_url` tool is entirely disabled and will not be registered.
+
 ### `pricing` *(map)*
 
 Optional per-model pricing for the cost surfacing. Defaults are baked in for the common Gemini SKUs; override here if your contract has different rates (or when a new model lands before Cogo has its pricing built in).
