@@ -121,3 +121,9 @@ full Go pipeline. Commits must be DCO-signed off (`git commit -s`)
 and follow Conventional Commits (the prefix drives the auto-generated
 release changelog). See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for
 the full contributor flow.
+
+**AI Agent Workflow:** When submitting changes as an AI, do not commit directly to `main`. Instead:
+1. Create a local feature branch (`git checkout -b <branch-name>`).
+2. Commit your changes (ensure they are DCO-signed with `-s`).
+3. Push the branch to the remote (`git push -u origin <branch-name>`).
+4. We usually submit a Pull Request and admin-merge it. If you have the `gh` CLI or other tools to open a PR, do so. Otherwise, inform the user that the branch is pushed and ready for a PR.
