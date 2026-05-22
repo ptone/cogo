@@ -297,11 +297,19 @@ func (m *Model) renderMessage(msg Message) string {
 	case RoleTool:
 		// Tool lines render the icon + name in the bold-accent style
 		// (matches the model name in the header — proven stable on
-		// every host we test). The arg summary, if any, is already
-		// embedded in msg.Text as a "· " separated suffix; both spans
-		// are wrapped at viewport width with continuation indent
+		// every host we test). If an arg summary is present (separated
+		// by " · "), it is styled with the System style to recede visually.
+		// Both spans are wrapped at viewport width with continuation indent
 		// past the "⚙ " prefix.
-		return m.styles.HeaderAccent.Render(wrapForChat("⚙  "+msg.Display(), m.viewport.Width, "   "))
+		text := msg.Display()
+		parts := strings.SplitN(text, " · ", 2)
+		var line string
+		if len(parts) == 2 {
+			line = m.styles.HeaderAccent.Render("⚙  "+parts[0]+" · ") + m.styles.System.Render(parts[1])
+		} else {
+			line = m.styles.HeaderAccent.Render("⚙  " + text)
+		}
+		return wrapForChat(line, m.viewport.Width, "   ")
 	default:
 		return msg.Display()
 	}
