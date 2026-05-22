@@ -283,10 +283,7 @@ func (m *Model) renderMessage(msg Message) string {
 		// at the bottom of the chat when the agent is between segments.
 		text := msg.Display()
 		if msg.Rendered == "" {
-			// Streaming: wrap raw text at viewport width so long
-			// chunks don't overflow before Glamour gets to re-render
-			// the finalized message.
-			return m.styles.Assistant.Render(wrapForChat(text, m.viewport.Width, ""))
+			return strings.TrimRight(m.md.Render(text), "\n")
 		}
 		// Append a per-prompt usage footer when available.
 		if footer := m.lastTurnUsageFooter(); footer != "" {
