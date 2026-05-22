@@ -350,11 +350,21 @@ func toolArgHint(name string, args map[string]any) string {
 		if cmd := pick("command", "cmd"); cmd != "" {
 			return "$ " + strings.ReplaceAll(strings.ReplaceAll(cmd, "\n", " "), "\t", " ")
 		}
-	case "read_file":
+	case "read_file", "write_file", "edit_file":
 		return pick("path", "file", "filename")
-	case "write_file":
-		return pick("path", "file", "filename")
-	case "grep":
+	case "read_many_files":
+		if pattern := pick("pattern"); pattern != "" {
+			return pattern
+		}
+		if paths, ok := args["paths"].([]any); ok && len(paths) > 0 {
+			if s, ok := paths[0].(string); ok {
+				if len(paths) > 1 {
+					return fmt.Sprintf("%s (+%d)", s, len(paths)-1)
+				}
+				return s
+			}
+		}
+	case "grep", "glob":
 		pattern := pick("pattern", "query")
 		path := pick("path", "dir")
 		switch {
@@ -365,8 +375,27 @@ func toolArgHint(name string, args map[string]any) string {
 		case path != "":
 			return path
 		}
-	case "list_files", "ls":
+	case "list_files", "ls", "list_dir":
 		return pick("path", "dir")
+	case "go_build", "go_test", "go_vet":
+		if p := pick("pattern"); p != "" {
+			return p
+		}
+		return "./..."
+	case "go_doc":
+		return pick("target")
+	case "go_symbol_find":
+		return pick("name")
+	case "go_implements":
+		return pick("interface")
+	case "todo":
+		action := pick("action")
+		if action == "add" {
+			if text := pick("text"); text != "" {
+				return "add: " + text
+			}
+		}
+		return action
 	}
 	return ""
 }
