@@ -192,14 +192,11 @@ type Model struct {
 // program.Run); resolving it during the program's lifetime causes
 // Glamour's background-color query response to leak into the textarea.
 func NewModel(cfg *config.Config, a *agent.Agent, mdStyle string) *Model {
-	keys := DefaultKeyMap()
-
 	ta := textarea.New()
 	ta.Placeholder = "Message · / for commands · @ for files…"
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0
 	ta.SetHeight(3)
-	ta.KeyMap.InsertNewline = keys.Newline
 	ta.Focus()
 
 	vp := viewport.New(0, 0)
@@ -219,7 +216,7 @@ func NewModel(cfg *config.Config, a *agent.Agent, mdStyle string) *Model {
 		textarea:            ta,
 		viewport:            vp,
 		spinner:             sp,
-		keys:                keys,
+		keys:                DefaultKeyMap(),
 		styles:              styles,
 		md:                  md,
 		mdStyle:             mdStyle,
