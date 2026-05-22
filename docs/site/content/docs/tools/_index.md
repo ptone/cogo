@@ -16,6 +16,7 @@ Cogo ships with a small, opinionated tool set. Every tool is gated by the [permi
 | `edit_file`   | Apply a string replacement, asserting the original text is present.  | `path_scope`        |
 | `list_dir`    | List a directory non-recursively, with type + size per entry.        | `path_scope`        |
 | `bash`        | Run a shell command via `/bin/sh -c`. Output captured + capped.      | `bash`              |
+| `fetch_url`   | HTTP GET against an operator-configured URL allowlist.               | `fetch_url`         |
 | `todo`        | Maintain an in-session task list the agent uses to plan + track.     | n/a (no I/O)        |
 
 Plus any [MCP tools](../configuration/mcp-servers/) and [skills](../configuration/skills/) you've configured — those use the same permission gate and output capping.

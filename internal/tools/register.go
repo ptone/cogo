@@ -141,6 +141,18 @@ func Build(cfg *config.Config, gate *permissions.Gate) (*Registry, error) {
 					"For code investigation always reach for the structured tools first. If you find yourself wanting to chain bash with pipes/redirects to modify files, that is a signal you should be using read_file + write_file / edit_file instead.",
 			}, bashFunc(gate, cfg))
 		}},
+		{
+			"fetch_url", "HTTP GET against an operator-configured URL allowlist.",
+			func() (tool.Tool, error) {
+				if len(cfg.URLScope.Allow) == 0 {
+					return nil, nil
+				}
+				return functiontool.New(functiontool.Config{
+					Name:        "fetch_url",
+					Description: "Fetch a URL via HTTP GET. Returns body, status, content-type, and final-URL after redirects. URLs must be in the operator's url_scope.allow list (typical: GitHub API, GCP APIs, internal cluster services). HTTPS by default; http:// only when explicitly allowed. Use this instead of `bash curl` so the URL + status land structured in the eventlog and the per-host header config can inject auth tokens for you. Body is capped (default 64KB) — pass max_bytes to override up to url_scope.max_body_bytes. Each redirect target is re-checked against the allowlist; a redirect to a denied host is an error, not a silent follow.",
+				}, fetchURLFunc(gate, cfg))
+			},
+		},
 		{"todo", "Maintain an agent-facing todo list (list/add/set_status/clear).", func() (tool.Tool, error) {
 			return functiontool.New(functiontool.Config{
 				Name: "todo", Description: "Maintain a short todo list visible to the user. Actions: list, add, set_status, clear.",
@@ -154,7 +166,9 @@ func Build(cfg *config.Config, gate *permissions.Gate) (*Registry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("tools: build %s: %w", s.name, err)
 		}
-		out.Tools = append(out.Tools, t)
+		if t != nil {
+			out.Tools = append(out.Tools, t)
+		}
 	}
 	return out, nil
 }
