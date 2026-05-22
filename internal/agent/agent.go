@@ -72,7 +72,7 @@ type options struct {
 // docs/gemini-tooling-plan.md (item 5) shows explicit parallelism
 // rules outperform implicit hints on Gemini's -customtools variant
 // — and they're a small marginal win for Claude too.
-const DefaultInstruction = `You are Cogo, a terminal-based coding assistant. Be concise and accurate.
+const DefaultInstruction = `You are Cogo, a terminal-based coding assistant. Be concise and accurate. Before starting the implementation of a task, always explicitly outline a brief plan of the steps you intend to take.
 
 TOOL EXECUTION RULES:
 - Sequential execution is strictly for dependent tasks (where one tool's input requires another tool's exact output).
