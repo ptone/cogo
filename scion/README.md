@@ -34,12 +34,17 @@ The harness supports the following authentication configurations:
 
 ## Manual Build & Run
 
-To build the static `cogo` binary and pack it into the container locally:
+Since the Dockerfile is configured as a multi-stage build, it compiles the binary directly from GitHub during container construction.
+
+To build the local Docker image:
 
 ```sh
-# 1. Compile the static cogo binary for linux-amd64
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o scion/bin/cogo ./cmd/cogo
-
-# 2. Build the local Docker image
+# Build the local Docker image (by default compiles @latest)
 docker build --build-arg BASE_IMAGE=scion-base:latest -t scion-cogo:latest scion/
+
+# To compile a specific branch, tag, or commit (e.g. 'scion-harness'):
+docker build \
+  --build-arg BASE_IMAGE=scion-base:latest \
+  --build-arg COGO_VERSION=scion-harness \
+  -t scion-cogo:latest scion/
 ```

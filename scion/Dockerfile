@@ -14,6 +14,14 @@
 # limitations under the License.
 
 ARG BASE_IMAGE
+FROM golang:1.26-alpine AS builder
+
+# Install git as it is required by Go to resolve dependencies
+RUN apk add --no-cache git
+
+ARG COGO_VERSION=latest
+RUN go install github.com/go-steer/cogo/cmd/cogo@${COGO_VERSION}
+
 FROM ${BASE_IMAGE}
 
 USER root
@@ -22,8 +30,8 @@ USER root
 RUN mkdir -p /home/scion/.agents /home/scion/.agents/skills \
   && chown -R scion:scion /home/scion/.agents
 
-# Copy pre-built static cogo binary into /usr/local/bin
-COPY bin/cogo /usr/local/bin/cogo
+# Copy the compiled cogo binary from the builder stage
+COPY --from=builder /go/bin/cogo /usr/local/bin/cogo
 RUN chmod +x /usr/local/bin/cogo
 
 USER scion
