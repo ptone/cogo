@@ -36,8 +36,6 @@ system_prompt_mode: prepend_to_instructions
 
 command:
   base: ["cogo", "-yolo"]
-  task_flag: "-p"
-  task_position: after_base_args
 
 env_template:
   SCION_AGENT_NAME: "{{ .AgentName }}"
@@ -89,6 +87,7 @@ auth:
       required_env:
         - any_of: ["GOOGLE_CLOUD_PROJECT"]
         - any_of: ["GOOGLE_CLOUD_LOCATION"]
+        - any_of: ["GOOGLE_GENAI_USE_VERTEXAI=true"]
   autodetect:
     env:
       GOOGLE_API_KEY: api-key
