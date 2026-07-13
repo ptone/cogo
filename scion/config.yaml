@@ -19,7 +19,7 @@ user: scion
 
 provisioner:
   type: container-script
-  interface_version: 1
+  interface_version: 2
   command: ["python3", "/home/scion/.scion/harness/provision.py"]
   timeout: 30s
   lifecycle_events:
