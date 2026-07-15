@@ -34,5 +34,4 @@ RUN mkdir -p /home/scion/.agents /home/scion/.agents/skills \
 COPY --from=builder /go/bin/cogo /usr/local/bin/cogo
 RUN chmod +x /usr/local/bin/cogo
 
-USER scion
 CMD ["cogo"]
